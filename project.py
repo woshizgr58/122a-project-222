@@ -5,9 +5,9 @@ import csv
 import mysql.connector
 from mysql.connector import Error
 
-# ---------------------------
+##############################
 # Helper: Database Connection
-# ---------------------------
+##############################
 def get_connection():
     try:
         conn = mysql.connector.connect(user='test', password='password', database='cs122a')
@@ -16,9 +16,9 @@ def get_connection():
         print("Fail")
         sys.exit(1)
 
-# ---------------------------
+##############################
 # Function 1: Import Data
-# ---------------------------
+##############################
 def import_data(folder):
     conn = get_connection()
     cursor = conn.cursor()
@@ -95,8 +95,7 @@ def import_data(folder):
                 FOREIGN KEY (rid) REFERENCES `Release`(rid)
             );
         """
-        ddl_statements = [create_release, create_viewer, create_movie, create_session, create_review, create_video]
-        for ddl in ddl_statements:
+        for ddl in [create_release, create_viewer, create_movie, create_session, create_review, create_video]:
             cursor.execute(ddl)
         conn.commit()
 
@@ -128,15 +127,15 @@ def import_data(folder):
 
         print("Success")
     except Exception as e:
-        # Uncomment next line for debugging: print(e)
+        # For debugging: print(e)
         print("Fail")
     finally:
         cursor.close()
         conn.close()
 
-# ---------------------------
+##############################
 # Function 2: Insert Viewer
-# ---------------------------
+##############################
 def insert_viewer(params):
     conn = get_connection()
     cursor = conn.cursor()
@@ -155,9 +154,9 @@ def insert_viewer(params):
         cursor.close()
         conn.close()
 
-# ---------------------------
+##############################
 # Function 3: Add Genre
-# ---------------------------
+##############################
 def add_genre(uid, genre):
     conn = get_connection()
     cursor = conn.cursor()
@@ -173,7 +172,7 @@ def add_genre(uid, genre):
         else:
             current_list = [g.strip().lower() for g in current.split(';')]
             if genre.lower() in current_list:
-                new_genres = current  # do nothing
+                new_genres = current
             else:
                 new_genres = current + ";" + genre
         cursor.execute("UPDATE Viewer SET genres = %s WHERE uid = %s;", (new_genres, uid))
@@ -185,9 +184,9 @@ def add_genre(uid, genre):
         cursor.close()
         conn.close()
 
-# ---------------------------
+##############################
 # Function 4: Delete Viewer
-# ---------------------------
+##############################
 def delete_viewer(uid):
     conn = get_connection()
     cursor = conn.cursor()
@@ -203,9 +202,9 @@ def delete_viewer(uid):
         cursor.close()
         conn.close()
 
-# ---------------------------
+##############################
 # Function 5: Insert Movie
-# ---------------------------
+##############################
 def insert_movie(rid, website_url):
     conn = get_connection()
     cursor = conn.cursor()
@@ -222,9 +221,9 @@ def insert_movie(rid, website_url):
         cursor.close()
         conn.close()
 
-# ---------------------------
+##############################
 # Function 6: Insert Session
-# ---------------------------
+##############################
 def insert_session(params):
     conn = get_connection()
     cursor = conn.cursor()
@@ -244,9 +243,9 @@ def insert_session(params):
         cursor.close()
         conn.close()
 
-# ---------------------------
+##############################
 # Function 7: Update Release
-# ---------------------------
+##############################
 def update_release(rid, title):
     conn = get_connection()
     cursor = conn.cursor()
@@ -255,20 +254,17 @@ def update_release(rid, title):
         cursor.execute(query, (title, rid))
         if cursor.rowcount == 0:
             cursor.execute("INSERT INTO `Release` (rid, genre, title) VALUES (%s, %s, %s);", (rid, "", title))
-            conn.commit()
-            print("Success")
-        else:
-            conn.commit()
-            print("Success")
+        conn.commit()
+        print("Success")
     except Exception as e:
         print("Fail")
     finally:
         cursor.close()
         conn.close()
 
-# ---------------------------
+##############################
 # Function 8: List Releases Reviewed by Viewer
-# ---------------------------
+##############################
 def list_releases(uid):
     conn = get_connection()
     cursor = conn.cursor()
@@ -289,19 +285,20 @@ def list_releases(uid):
         cursor.close()
         conn.close()
 
-# ---------------------------
+##############################
 # Function 9: Popular Release
-# ---------------------------
+##############################
 def popular_release(N):
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        # Order by reviewCount descending, then rid ascending.
         query = """
             SELECT r.rid, r.title, COUNT(rv.uid) AS reviewCount
             FROM `Release` r 
             LEFT JOIN Review rv ON r.rid = rv.rid
             GROUP BY r.rid, r.title
-            ORDER BY reviewCount DESC, r.rid DESC
+            ORDER BY reviewCount DESC, r.rid ASC
             LIMIT %s;
         """
         cursor.execute(query, (N,))
@@ -314,34 +311,36 @@ def popular_release(N):
         cursor.close()
         conn.close()
 
-# ---------------------------
+##############################
 # Function 10: Title of Release by Session ID
-# ---------------------------
+##############################
 def release_title(sid):
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        # Use LEFT JOIN for Video so that if no video exists, release info is still returned.
         query = """
-            SELECT r.rid, r.title AS release_title, r.genre, v.title AS video_title, s.ep_num, v.length
+            SELECT r.rid, r.title AS release_title, r.genre, 
+                   IFNULL(v.title, '') AS video_title, s.ep_num, IFNULL(v.length, 0) AS length
             FROM Session s 
             JOIN `Release` r ON s.rid = r.rid
-            JOIN Video v ON s.rid = v.rid AND s.ep_num = v.ep_num
+            LEFT JOIN Video v ON s.rid = v.rid AND s.ep_num = v.ep_num
             WHERE s.sid = %s
             ORDER BY r.title ASC;
         """
         cursor.execute(query, (sid,))
         rows = cursor.fetchall()
         for row in rows:
-            print(",".join(str(x) for x in row))
+            print(",".join("" if x is None else str(x) for x in row))
     except Exception as e:
         print("Fail")
     finally:
         cursor.close()
         conn.close()
 
-# ---------------------------
+##############################
 # Function 11: Active Viewers
-# ---------------------------
+##############################
 def active_viewer(N, start_date, end_date):
     conn = get_connection()
     cursor = conn.cursor()
@@ -365,19 +364,18 @@ def active_viewer(N, start_date, end_date):
         cursor.close()
         conn.close()
 
-# ---------------------------
+##############################
 # Function 12: Number of Videos Viewed
-# ---------------------------
+##############################
 def videos_viewed(rid):
     conn = get_connection()
     cursor = conn.cursor()
     try:
         query = """
-            SELECT v.rid, v.ep_num, v.title, v.length, 
-                   COALESCE(COUNT(DISTINCT s.uid), 0) AS viewerCount
-            FROM Video v
+            SELECT v.rid, v.ep_num, v.title, v.length, COUNT(DISTINCT s.uid) AS viewerCount
+            FROM Video v 
             LEFT JOIN Session s ON v.rid = s.rid AND v.ep_num = s.ep_num
-            WHERE v.rid = %s
+            WHERE v.rid = %s 
             GROUP BY v.rid, v.ep_num, v.title, v.length
             ORDER BY v.rid DESC;
         """
@@ -391,9 +389,9 @@ def videos_viewed(rid):
         cursor.close()
         conn.close()
 
-# ---------------------------
+##############################
 # Main Dispatch Function
-# ---------------------------
+##############################
 def main():
     if len(sys.argv) < 2:
         print("Fail")
@@ -405,8 +403,7 @@ def main():
         if len(sys.argv) != 3:
             print("Fail")
             return
-        folder = sys.argv[2]
-        import_data(folder)
+        import_data(sys.argv[2])
 
     elif func == "insertViewer":
         if len(sys.argv) != 14:
@@ -428,7 +425,7 @@ def main():
                 sys.argv[12],
                 sys.argv[13]
             ]
-        except Exception as e:
+        except:
             print("Fail")
             return
         insert_viewer(params)
@@ -440,7 +437,7 @@ def main():
         try:
             uid = int(sys.argv[2])
             genre = sys.argv[3]
-        except Exception as e:
+        except:
             print("Fail")
             return
         add_genre(uid, genre)
@@ -451,7 +448,7 @@ def main():
             return
         try:
             uid = int(sys.argv[2])
-        except Exception as e:
+        except:
             print("Fail")
             return
         delete_viewer(uid)
@@ -463,7 +460,7 @@ def main():
         try:
             rid = int(sys.argv[2])
             website_url = sys.argv[3]
-        except Exception as e:
+        except:
             print("Fail")
             return
         insert_movie(rid, website_url)
@@ -482,7 +479,7 @@ def main():
             quality = sys.argv[8]
             device = sys.argv[9]
             params = [sid, uid, rid, ep_num, initiate_at, leave_at, quality, device]
-        except Exception as e:
+        except:
             print("Fail")
             return
         insert_session(params)
@@ -494,7 +491,7 @@ def main():
         try:
             rid = int(sys.argv[2])
             title = sys.argv[3]
-        except Exception as e:
+        except:
             print("Fail")
             return
         update_release(rid, title)
@@ -505,7 +502,7 @@ def main():
             return
         try:
             uid = int(sys.argv[2])
-        except Exception as e:
+        except:
             print("Fail")
             return
         list_releases(uid)
@@ -516,7 +513,7 @@ def main():
             return
         try:
             N = int(sys.argv[2])
-        except Exception as e:
+        except:
             print("Fail")
             return
         popular_release(N)
@@ -527,7 +524,7 @@ def main():
             return
         try:
             sid = int(sys.argv[2])
-        except Exception as e:
+        except:
             print("Fail")
             return
         release_title(sid)
@@ -540,7 +537,7 @@ def main():
             N = int(sys.argv[2])
             start_date = sys.argv[3]
             end_date = sys.argv[4]
-        except Exception as e:
+        except:
             print("Fail")
             return
         active_viewer(N, start_date, end_date)
@@ -551,7 +548,7 @@ def main():
             return
         try:
             rid = int(sys.argv[2])
-        except Exception as e:
+        except:
             print("Fail")
             return
         videos_viewed(rid)
