@@ -23,14 +23,13 @@ def import_data(folder):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Disable foreign key checks to drop tables in any order.
+        # Disable FK checks and drop tables
         cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
         tables = ["Session", "Review", "Movie", "Video", "Viewer", "`Release`"]
         for t in tables:
             cursor.execute(f"DROP TABLE IF EXISTS {t};")
         conn.commit()
-
-        # Create tables (using backticks for Release)
+        # Create tables (use backticks for Release)
         create_release = """
             CREATE TABLE `Release` (
                 rid INT PRIMARY KEY,
@@ -98,10 +97,10 @@ def import_data(folder):
         for ddl in [create_release, create_viewer, create_movie, create_session, create_review, create_video]:
             cursor.execute(ddl)
         conn.commit()
-
         cursor.execute("SET FOREIGN_KEY_CHECKS=1;")
         conn.commit()
 
+        # Helper: load CSV file
         def load_csv(table_name, num_cols):
             file_path = os.path.join(folder, f"{table_name}.csv")
             if not os.path.isfile(file_path):
@@ -124,10 +123,9 @@ def import_data(folder):
         load_csv("Session", 8)
         load_csv("Review", 3)
         load_csv("Video", 4)
-
         print("Success")
     except Exception as e:
-        # For debugging: print(e)
+        # Uncomment next line to debug: print(e)
         print("Fail")
     finally:
         cursor.close()
@@ -164,15 +162,19 @@ def add_genre(uid, genre):
         cursor.execute("SELECT genres FROM Viewer WHERE uid = %s;", (uid,))
         result = cursor.fetchone()
         if result is None:
+            # Viewer does not exist.
             print("Fail")
             return
         current = result[0]
-        if current is None or current.strip() == "":
+        if current is None:
+            current = ""
+        # Split current genres (if any) and check (case-insensitive)
+        if current.strip() == "":
             new_genres = genre
         else:
             current_list = [g.strip().lower() for g in current.split(';')]
             if genre.lower() in current_list:
-                new_genres = current
+                new_genres = current  # already exists
             else:
                 new_genres = current + ";" + genre
         cursor.execute("UPDATE Viewer SET genres = %s WHERE uid = %s;", (new_genres, uid))
@@ -292,13 +294,12 @@ def popular_release(N):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Order by reviewCount descending, then rid ascending.
         query = """
             SELECT r.rid, r.title, COUNT(rv.uid) AS reviewCount
             FROM `Release` r 
             LEFT JOIN Review rv ON r.rid = rv.rid
             GROUP BY r.rid, r.title
-            ORDER BY reviewCount DESC, r.rid ASC
+            ORDER BY reviewCount DESC, r.rid DESC
             LIMIT %s;
         """
         cursor.execute(query, (N,))
@@ -318,19 +319,18 @@ def release_title(sid):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Use LEFT JOIN for Video so that if no video exists, release info is still returned.
         query = """
-            SELECT r.rid, r.title AS release_title, r.genre, 
-                   IFNULL(v.title, '') AS video_title, s.ep_num, IFNULL(v.length, 0) AS length
+            SELECT r.rid, r.title, r.genre, v.title, s.ep_num, v.length
             FROM Session s 
             JOIN `Release` r ON s.rid = r.rid
-            LEFT JOIN Video v ON s.rid = v.rid AND s.ep_num = v.ep_num
+            JOIN Video v ON s.rid = v.rid AND s.ep_num = v.ep_num
             WHERE s.sid = %s
             ORDER BY r.title ASC;
         """
         cursor.execute(query, (sid,))
         rows = cursor.fetchall()
         for row in rows:
+            # Convert None values to empty string (if any)
             print(",".join("" if x is None else str(x) for x in row))
     except Exception as e:
         print("Fail")
@@ -345,13 +345,17 @@ def active_viewer(N, start_date, end_date):
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        # Use a subquery to get uids with at least N sessions in the date range.
         query = """
             SELECT v.uid, v.first, v.last
             FROM Viewer v
-            JOIN Session s ON v.uid = s.uid
-            WHERE DATE(s.initiate_at) BETWEEN %s AND %s
-            GROUP BY v.uid, v.first, v.last
-            HAVING COUNT(s.sid) >= %s
+            WHERE v.uid IN (
+                SELECT s.uid
+                FROM Session s
+                WHERE DATE(s.initiate_at) BETWEEN %s AND %s
+                GROUP BY s.uid
+                HAVING COUNT(s.sid) >= %s
+            )
             ORDER BY v.uid ASC;
         """
         cursor.execute(query, (start_date, end_date, N))
@@ -377,7 +381,7 @@ def videos_viewed(rid):
             LEFT JOIN Session s ON v.rid = s.rid AND v.ep_num = s.ep_num
             WHERE v.rid = %s 
             GROUP BY v.rid, v.ep_num, v.title, v.length
-            ORDER BY v.rid DESC;
+            ORDER BY v.rid DESC, v.ep_num ASC;
         """
         cursor.execute(query, (rid,))
         rows = cursor.fetchall()
