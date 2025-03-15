@@ -162,19 +162,36 @@ def add_genre(uid, genre):
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        # 1. Check if the viewer exists
         cursor.execute("SELECT genres FROM Viewer WHERE uid = %s;", (uid,))
         result = cursor.fetchone()
         if result is None:
-            # User does not exist: operation fails.
+            # If no matching user, the operation fails
             print("Fail")
             return
+
+        # 2. Retrieve current genres (could be None or empty string)
         current = result[0] if result[0] is not None else ""
-        if current.strip() == "":
+        current = current.strip()
+
+        # 3. Convert current genres into a list, ignoring case for duplicates
+        if current == "":
+            # No existing genres → simply store the new genre
             new_genres = genre
         else:
-            new_genres = current + ";" + genre
+            # Split the semicolon list, compare ignoring case
+            current_list = [g.strip().lower() for g in current.split(';')]
+            if genre.lower() in current_list:
+                # Already present ignoring case → do not add again
+                new_genres = current  # no change
+            else:
+                # Append with semicolon
+                new_genres = current + ";" + genre
+
+        # 4. Update the viewer’s genres
         cursor.execute("UPDATE Viewer SET genres = %s WHERE uid = %s;", (new_genres, uid))
         conn.commit()
+
         print("Success")
     except Exception:
         print("Fail")
