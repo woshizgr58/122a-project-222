@@ -365,8 +365,6 @@ def active_viewer(N, start_date, end_date):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Example query: date/time comparison is direct,
-        # matching the staff’s statement that date vs datetime is okay.
         query = """
             SELECT v.uid, v.first, v.last
             FROM Viewer v
@@ -379,15 +377,12 @@ def active_viewer(N, start_date, end_date):
         cursor.execute(query, (start_date, end_date, N))
         rows = cursor.fetchall()
 
-        if not rows:
-            # If your tests require printing "Fail" for no matches, do so:
-            print("Fail")
-        else:
-            # Otherwise, print each row as CSV
-            for row in rows:
-                print(",".join(str(x) for x in row))
+        # Print each matching row. If there are no rows, print nothing.
+        for row in rows:
+            print(",".join(str(x) for x in row))
 
     except Exception:
+        # If there's a genuine SQL or other runtime error, print "Fail".
         print("Fail")
     finally:
         cursor.close()
