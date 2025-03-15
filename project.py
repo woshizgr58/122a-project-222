@@ -23,13 +23,11 @@ def import_data(folder):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Disable FK checks and drop tables
         cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
         tables = ["Session", "Review", "Movie", "Video", "Viewer", "`Release`"]
         for t in tables:
             cursor.execute(f"DROP TABLE IF EXISTS {t};")
         conn.commit()
-        # Create tables (use backticks for Release)
         create_release = """
             CREATE TABLE `Release` (
                 rid INT PRIMARY KEY,
@@ -99,7 +97,7 @@ def import_data(folder):
         conn.commit()
         cursor.execute("SET FOREIGN_KEY_CHECKS=1;")
         conn.commit()
-        # Helper: load CSV file
+
         def load_csv(table_name, num_cols):
             file_path = os.path.join(folder, f"{table_name}.csv")
             if not os.path.isfile(file_path):
@@ -115,6 +113,7 @@ def import_data(folder):
                     row = [col if col != "" else None for col in row]
                     cursor.execute(query, row)
                 conn.commit()
+
         load_csv("Release", 3)
         load_csv("Viewer", 12)
         load_csv("Movie", 2)
@@ -123,7 +122,7 @@ def import_data(folder):
         load_csv("Video", 4)
         print("Success")
     except Exception as e:
-        # Uncomment for debugging: print(e)
+        # Uncomment below for debugging: print(e)
         print("Fail")
     finally:
         cursor.close()
@@ -168,7 +167,7 @@ def add_genre(uid, genre):
         else:
             current_list = [g.strip().lower() for g in current.split(';')]
             if genre.lower() in current_list:
-                new_genres = current  # already exists
+                new_genres = current
             else:
                 new_genres = current + ";" + genre
         cursor.execute("UPDATE Viewer SET genres = %s WHERE uid = %s;", (new_genres, uid))
@@ -273,11 +272,8 @@ def list_releases(uid):
         """
         cursor.execute(query, (uid,))
         rows = cursor.fetchall()
-        if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception as e:
         print("Fail")
     finally:
@@ -296,16 +292,13 @@ def popular_release(N):
             FROM `Release` r 
             LEFT JOIN Review rv ON r.rid = rv.rid
             GROUP BY r.rid, r.title
-            ORDER BY reviewCount DESC, r.rid ASC
+            ORDER BY reviewCount DESC, r.rid DESC
             LIMIT %s;
         """
         cursor.execute(query, (N,))
         rows = cursor.fetchall()
-        if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception as e:
         print("Fail")
     finally:
@@ -329,11 +322,8 @@ def release_title(sid):
         """
         cursor.execute(query, (sid,))
         rows = cursor.fetchall()
-        if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception as e:
         print("Fail")
     finally:
@@ -347,7 +337,6 @@ def active_viewer(N, start_date, end_date):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Adjust date filter: add time parts to cover full days.
         query = """
             SELECT v.uid, v.first, v.last
             FROM Viewer v JOIN Session s ON v.uid = s.uid
@@ -358,11 +347,8 @@ def active_viewer(N, start_date, end_date):
         """
         cursor.execute(query, (start_date, end_date, N))
         rows = cursor.fetchall()
-        if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception as e:
         print("Fail")
     finally:
@@ -386,11 +372,8 @@ def videos_viewed(rid):
         """
         cursor.execute(query, (rid,))
         rows = cursor.fetchall()
-        if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception as e:
         print("Fail")
     finally:
