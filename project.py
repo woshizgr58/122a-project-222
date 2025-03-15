@@ -23,11 +23,13 @@ def import_data(folder):
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        # Disable FK checks and drop tables
         cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
         tables = ["Session", "Review", "Movie", "Video", "Viewer", "`Release`"]
         for t in tables:
             cursor.execute(f"DROP TABLE IF EXISTS {t};")
         conn.commit()
+        # Create tables (use backticks for Release)
         create_release = """
             CREATE TABLE `Release` (
                 rid INT PRIMARY KEY,
@@ -98,6 +100,7 @@ def import_data(folder):
         cursor.execute("SET FOREIGN_KEY_CHECKS=1;")
         conn.commit()
 
+        # Helper: load CSV file
         def load_csv(table_name, num_cols):
             file_path = os.path.join(folder, f"{table_name}.csv")
             if not os.path.isfile(file_path):
@@ -122,7 +125,7 @@ def import_data(folder):
         load_csv("Video", 4)
         print("Success")
     except Exception as e:
-        # Uncomment below for debugging: print(e)
+        # Uncomment next line to debug: print(e)
         print("Fail")
     finally:
         cursor.close()
@@ -161,13 +164,13 @@ def add_genre(uid, genre):
         if result is None:
             print("Fail")
             return
-        current = result[0] if result[0] is not None else ""
-        if current.strip() == "":
+        current = result[0]
+        if current is None or current.strip() == "":
             new_genres = genre
         else:
             current_list = [g.strip().lower() for g in current.split(';')]
             if genre.lower() in current_list:
-                new_genres = current
+                new_genres = current  # already exists
             else:
                 new_genres = current + ";" + genre
         cursor.execute("UPDATE Viewer SET genres = %s WHERE uid = %s;", (new_genres, uid))
@@ -292,7 +295,7 @@ def popular_release(N):
             FROM `Release` r 
             LEFT JOIN Review rv ON r.rid = rv.rid
             GROUP BY r.rid, r.title
-            ORDER BY reviewCount DESC, r.rid DESC
+            ORDER BY reviewCount DESC, r.rid ASC
             LIMIT %s;
         """
         cursor.execute(query, (N,))
@@ -313,17 +316,16 @@ def release_title(sid):
     cursor = conn.cursor()
     try:
         query = """
-            SELECT r.rid, r.title, r.genre, IFNULL(v.title,''), s.ep_num, IFNULL(v.length,0)
+            SELECT r.rid, r.title, r.genre, v.title, s.ep_num, v.length
             FROM Session s 
             JOIN `Release` r ON s.rid = r.rid
-            LEFT JOIN Video v ON s.rid = v.rid AND s.ep_num = v.ep_num
-            WHERE s.sid = %s
-            ORDER BY r.title ASC;
+            JOIN Video v ON s.rid = v.rid AND s.ep_num = v.ep_num
+            WHERE s.sid = %s;
         """
         cursor.execute(query, (sid,))
         rows = cursor.fetchall()
         for row in rows:
-            print(",".join(str(x) for x in row))
+            print(",".join("" if x is None else str(x) for x in row))
     except Exception as e:
         print("Fail")
     finally:
@@ -339,10 +341,14 @@ def active_viewer(N, start_date, end_date):
     try:
         query = """
             SELECT v.uid, v.first, v.last
-            FROM Viewer v JOIN Session s ON v.uid = s.uid
-            WHERE s.initiate_at BETWEEN CONCAT(%s, ' 00:00:00') AND CONCAT(%s, ' 23:59:59')
-            GROUP BY v.uid, v.first, v.last
-            HAVING COUNT(s.sid) >= %s
+            FROM Viewer v
+            WHERE v.uid IN (
+                SELECT s.uid
+                FROM Session s
+                WHERE s.initiate_at BETWEEN CONCAT(%s, ' 00:00:00') AND CONCAT(%s, ' 23:59:59')
+                GROUP BY s.uid
+                HAVING COUNT(s.sid) >= %s
+            )
             ORDER BY v.uid ASC;
         """
         cursor.execute(query, (start_date, end_date, N))
@@ -368,7 +374,7 @@ def videos_viewed(rid):
             LEFT JOIN Session s ON v.rid = s.rid AND v.ep_num = s.ep_num
             WHERE v.rid = %s 
             GROUP BY v.rid, v.ep_num, v.title, v.length
-            ORDER BY v.rid DESC, v.ep_num ASC;
+            ORDER BY v.ep_num ASC;
         """
         cursor.execute(query, (rid,))
         rows = cursor.fetchall()
@@ -387,12 +393,15 @@ def main():
     if len(sys.argv) < 2:
         print("Fail")
         return
+
     func = sys.argv[1]
+
     if func == "import":
         if len(sys.argv) != 3:
             print("Fail")
             return
         import_data(sys.argv[2])
+
     elif func == "insertViewer":
         if len(sys.argv) != 14:
             print("Fail")
@@ -417,6 +426,7 @@ def main():
             print("Fail")
             return
         insert_viewer(params)
+
     elif func == "addGenre":
         if len(sys.argv) != 4:
             print("Fail")
@@ -428,6 +438,7 @@ def main():
             print("Fail")
             return
         add_genre(uid, genre)
+
     elif func == "deleteViewer":
         if len(sys.argv) != 3:
             print("Fail")
@@ -438,6 +449,7 @@ def main():
             print("Fail")
             return
         delete_viewer(uid)
+
     elif func == "insertMovie":
         if len(sys.argv) != 4:
             print("Fail")
@@ -449,6 +461,7 @@ def main():
             print("Fail")
             return
         insert_movie(rid, website_url)
+
     elif func == "insertSession":
         if len(sys.argv) != 10:
             print("Fail")
@@ -467,6 +480,7 @@ def main():
             print("Fail")
             return
         insert_session(params)
+
     elif func == "updateRelease":
         if len(sys.argv) != 4:
             print("Fail")
@@ -478,6 +492,7 @@ def main():
             print("Fail")
             return
         update_release(rid, title)
+
     elif func == "listReleases":
         if len(sys.argv) != 3:
             print("Fail")
@@ -488,6 +503,7 @@ def main():
             print("Fail")
             return
         list_releases(uid)
+
     elif func == "popularRelease":
         if len(sys.argv) != 3:
             print("Fail")
@@ -498,6 +514,7 @@ def main():
             print("Fail")
             return
         popular_release(N)
+
     elif func == "releaseTitle":
         if len(sys.argv) != 3:
             print("Fail")
@@ -508,6 +525,7 @@ def main():
             print("Fail")
             return
         release_title(sid)
+
     elif func == "activeViewer":
         if len(sys.argv) != 5:
             print("Fail")
@@ -520,6 +538,7 @@ def main():
             print("Fail")
             return
         active_viewer(N, start_date, end_date)
+
     elif func == "videosViewed":
         if len(sys.argv) != 3:
             print("Fail")
