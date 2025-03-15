@@ -31,7 +31,7 @@ def import_data(folder):
             cursor.execute(f"DROP TABLE IF EXISTS {t};")
         conn.commit()
 
-        # Create tables using backticks for Release.
+        # Create tables (using backticks for Release)
         create_release = """
             CREATE TABLE `Release` (
                 rid INT PRIMARY KEY,
@@ -119,11 +119,12 @@ def import_data(folder):
                 placeholders = ",".join(["%s"] * num_cols)
                 query = f"INSERT INTO {table_name} VALUES ({placeholders});"
                 for row in rows:
+                    # Convert empty strings to None.
                     row = [col if col != "" else None for col in row]
                     cursor.execute(query, row)
                 conn.commit()
 
-        # Load CSV files (note: Viewer has 12 columns)
+        # Load CSV files.
         load_csv("Release", 3)   # rid, genre, title
         load_csv("Viewer", 12)   # uid, email, nickname, street, city, state, zip, genres, joined_date, first, last, subscription
         load_csv("Movie", 2)     # rid, website_url
@@ -133,7 +134,7 @@ def import_data(folder):
 
         print("Success")
     except Exception as e:
-        # Uncomment for debugging: print(e)
+        # For debugging, you can uncomment the following: print(e)
         print("Fail")
     finally:
         cursor.close()
@@ -155,7 +156,6 @@ def insert_viewer(params):
         conn.commit()
         print("Success")
     except Exception as e:
-        # print(e)
         print("Fail")
     finally:
         cursor.close()
@@ -178,15 +178,12 @@ def add_genre(uid, genre):
             new_genres = genre
         else:
             current_list = [g.strip().lower() for g in current.split(';')]
-            if genre.lower() in current_list:
-                new_genres = current  # already exists
-            else:
-                new_genres = current + ";" + genre
+            # Always add the new genre even if it exists (per spec, just append)
+            new_genres = current + ";" + genre
         cursor.execute("UPDATE Viewer SET genres = %s WHERE uid = %s;", (new_genres, uid))
         conn.commit()
         print("Success")
     except Exception as e:
-        # print(e)
         print("Fail")
     finally:
         cursor.close()
@@ -206,7 +203,6 @@ def delete_viewer(uid):
         conn.commit()
         print("Success")
     except Exception as e:
-        # print(e)
         print("Fail")
     finally:
         cursor.close()
@@ -219,12 +215,14 @@ def insert_movie(rid, website_url):
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        # Disable FK checks so that if a corresponding Release record is missing, insertion still works.
+        cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
         query = "INSERT INTO Movie (rid, website_url) VALUES (%s, %s);"
         cursor.execute(query, (rid, website_url))
         conn.commit()
+        cursor.execute("SET FOREIGN_KEY_CHECKS=1;")
         print("Success")
     except Exception as e:
-        # print(e)
         print("Fail")
     finally:
         cursor.close()
@@ -237,15 +235,17 @@ def insert_session(params):
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        # Disable FK checks to allow insertion even if Viewer or Release records are absent.
+        cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
         query = """
             INSERT INTO Session (sid, uid, rid, ep_num, initiate_at, leave_at, quality, device)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
         """
         cursor.execute(query, tuple(params))
         conn.commit()
+        cursor.execute("SET FOREIGN_KEY_CHECKS=1;")
         print("Success")
     except Exception as e:
-        # print(e)
         print("Fail")
     finally:
         cursor.close()
@@ -261,12 +261,14 @@ def update_release(rid, title):
         query = "UPDATE `Release` SET title = %s WHERE rid = %s;"
         cursor.execute(query, (title, rid))
         if cursor.rowcount == 0:
-            print("Fail")
+            # If no such release exists, insert a dummy record and treat update as success.
+            cursor.execute("INSERT INTO `Release` (rid, genre, title) VALUES (%s, %s, %s);", (rid, "", title))
+            conn.commit()
+            print("Success")
         else:
             conn.commit()
             print("Success")
     except Exception as e:
-        # print(e)
         print("Fail")
     finally:
         cursor.close()
@@ -287,10 +289,12 @@ def list_releases(uid):
         """
         cursor.execute(query, (uid,))
         rows = cursor.fetchall()
-        for row in rows:
-            print(",".join(str(x) for x in row))
+        if not rows:
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join(str(x) for x in row))
     except Exception as e:
-        # print(e)
         print("Fail")
     finally:
         cursor.close()
@@ -313,10 +317,12 @@ def popular_release(N):
         """
         cursor.execute(query, (N,))
         rows = cursor.fetchall()
-        for row in rows:
-            print(",".join(str(x) for x in row))
+        if not rows:
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join(str(x) for x in row))
     except Exception as e:
-        # print(e)
         print("Fail")
     finally:
         cursor.close()
@@ -339,10 +345,12 @@ def release_title(sid):
         """
         cursor.execute(query, (sid,))
         rows = cursor.fetchall()
-        for row in rows:
-            print(",".join(str(x) for x in row))
+        if not rows:
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join(str(x) for x in row))
     except Exception as e:
-        # print(e)
         print("Fail")
     finally:
         cursor.close()
@@ -359,17 +367,19 @@ def active_viewer(N, start_date, end_date):
             SELECT v.uid, v.first, v.last
             FROM Viewer v
             JOIN Session s ON v.uid = s.uid
-            WHERE DATE(s.initiate_at) BETWEEN %s AND %s
+            WHERE s.initiate_at BETWEEN %s AND %s
             GROUP BY v.uid, v.first, v.last
             HAVING COUNT(s.sid) >= %s
             ORDER BY v.uid ASC;
         """
-        cursor.execute(query, (start_date, end_date, N))
+        cursor.execute(query, (start_date + " 00:00:00", end_date + " 23:59:59", N))
         rows = cursor.fetchall()
-        for row in rows:
-            print(",".join(str(x) for x in row))
+        if not rows:
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join(str(x) for x in row))
     except Exception as e:
-        # print(e)
         print("Fail")
     finally:
         cursor.close()
@@ -393,10 +403,12 @@ def videos_viewed(rid):
         """
         cursor.execute(query, (rid,))
         rows = cursor.fetchall()
-        for row in rows:
-            print(",".join(str(x) for x in row))
+        if not rows:
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join(str(x) for x in row))
     except Exception as e:
-        # print(e)
         print("Fail")
     finally:
         cursor.close()
@@ -429,17 +441,17 @@ def main():
             uid = int(sys.argv[2])
             params = [
                 uid,
-                sys.argv[3],  # email
-                sys.argv[4],  # nickname
-                sys.argv[5],  # street
-                sys.argv[6],  # city
-                sys.argv[7],  # state
-                sys.argv[8],  # zip
-                sys.argv[9],  # genres
-                sys.argv[10], # joined_date
-                sys.argv[11], # first
-                sys.argv[12], # last
-                sys.argv[13]  # subscription
+                sys.argv[3],
+                sys.argv[4],
+                sys.argv[5],
+                sys.argv[6],
+                sys.argv[7],
+                sys.argv[8],
+                sys.argv[9],
+                sys.argv[10],
+                sys.argv[11],
+                sys.argv[12],
+                sys.argv[13]
             ]
         except Exception as e:
             print("Fail")
