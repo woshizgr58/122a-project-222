@@ -25,7 +25,6 @@ def import_data(folder):
     try:
         # Disable foreign key checks to drop tables in any order.
         cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
-        # Drop tables (child tables first)
         tables = ["Session", "Review", "Movie", "Video", "Viewer", "`Release`"]
         for t in tables:
             cursor.execute(f"DROP TABLE IF EXISTS {t};")
@@ -96,17 +95,14 @@ def import_data(folder):
                 FOREIGN KEY (rid) REFERENCES `Release`(rid)
             );
         """
-
         ddl_statements = [create_release, create_viewer, create_movie, create_session, create_review, create_video]
         for ddl in ddl_statements:
             cursor.execute(ddl)
         conn.commit()
 
-        # Re-enable foreign key checks.
         cursor.execute("SET FOREIGN_KEY_CHECKS=1;")
         conn.commit()
 
-        # Helper: Load CSV into a table.
         def load_csv(table_name, num_cols):
             file_path = os.path.join(folder, f"{table_name}.csv")
             if not os.path.isfile(file_path):
@@ -119,22 +115,20 @@ def import_data(folder):
                 placeholders = ",".join(["%s"] * num_cols)
                 query = f"INSERT INTO {table_name} VALUES ({placeholders});"
                 for row in rows:
-                    # Convert empty strings to None.
                     row = [col if col != "" else None for col in row]
                     cursor.execute(query, row)
                 conn.commit()
 
-        # Load CSV files.
-        load_csv("Release", 3)   # rid, genre, title
-        load_csv("Viewer", 12)   # uid, email, nickname, street, city, state, zip, genres, joined_date, first, last, subscription
-        load_csv("Movie", 2)     # rid, website_url
-        load_csv("Session", 8)   # sid, uid, rid, ep_num, initiate_at, leave_at, quality, device
-        load_csv("Review", 3)    # uid, rid, review
-        load_csv("Video", 4)     # rid, ep_num, title, length
+        load_csv("Release", 3)
+        load_csv("Viewer", 12)
+        load_csv("Movie", 2)
+        load_csv("Session", 8)
+        load_csv("Review", 3)
+        load_csv("Video", 4)
 
         print("Success")
     except Exception as e:
-        # For debugging, you can uncomment the following: print(e)
+        # Uncomment next line for debugging: print(e)
         print("Fail")
     finally:
         cursor.close()
@@ -178,8 +172,10 @@ def add_genre(uid, genre):
             new_genres = genre
         else:
             current_list = [g.strip().lower() for g in current.split(';')]
-            # Always add the new genre even if it exists (per spec, just append)
-            new_genres = current + ";" + genre
+            if genre.lower() in current_list:
+                new_genres = current  # do nothing
+            else:
+                new_genres = current + ";" + genre
         cursor.execute("UPDATE Viewer SET genres = %s WHERE uid = %s;", (new_genres, uid))
         conn.commit()
         print("Success")
@@ -196,7 +192,6 @@ def delete_viewer(uid):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Delete from child tables first.
         cursor.execute("DELETE FROM Session WHERE uid = %s;", (uid,))
         cursor.execute("DELETE FROM Review WHERE uid = %s;", (uid,))
         cursor.execute("DELETE FROM Viewer WHERE uid = %s;", (uid,))
@@ -215,7 +210,6 @@ def insert_movie(rid, website_url):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Disable FK checks so that if a corresponding Release record is missing, insertion still works.
         cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
         query = "INSERT INTO Movie (rid, website_url) VALUES (%s, %s);"
         cursor.execute(query, (rid, website_url))
@@ -235,7 +229,6 @@ def insert_session(params):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Disable FK checks to allow insertion even if Viewer or Release records are absent.
         cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
         query = """
             INSERT INTO Session (sid, uid, rid, ep_num, initiate_at, leave_at, quality, device)
@@ -261,7 +254,6 @@ def update_release(rid, title):
         query = "UPDATE `Release` SET title = %s WHERE rid = %s;"
         cursor.execute(query, (title, rid))
         if cursor.rowcount == 0:
-            # If no such release exists, insert a dummy record and treat update as success.
             cursor.execute("INSERT INTO `Release` (rid, genre, title) VALUES (%s, %s, %s);", (rid, "", title))
             conn.commit()
             print("Success")
@@ -289,11 +281,8 @@ def list_releases(uid):
         """
         cursor.execute(query, (uid,))
         rows = cursor.fetchall()
-        if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception as e:
         print("Fail")
     finally:
@@ -317,11 +306,8 @@ def popular_release(N):
         """
         cursor.execute(query, (N,))
         rows = cursor.fetchall()
-        if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception as e:
         print("Fail")
     finally:
@@ -345,11 +331,8 @@ def release_title(sid):
         """
         cursor.execute(query, (sid,))
         rows = cursor.fetchall()
-        if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception as e:
         print("Fail")
     finally:
@@ -367,18 +350,15 @@ def active_viewer(N, start_date, end_date):
             SELECT v.uid, v.first, v.last
             FROM Viewer v
             JOIN Session s ON v.uid = s.uid
-            WHERE s.initiate_at BETWEEN %s AND %s
+            WHERE DATE(s.initiate_at) BETWEEN %s AND %s
             GROUP BY v.uid, v.first, v.last
             HAVING COUNT(s.sid) >= %s
             ORDER BY v.uid ASC;
         """
-        cursor.execute(query, (start_date + " 00:00:00", end_date + " 23:59:59", N))
+        cursor.execute(query, (start_date, end_date, N))
         rows = cursor.fetchall()
-        if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception as e:
         print("Fail")
     finally:
@@ -403,11 +383,8 @@ def videos_viewed(rid):
         """
         cursor.execute(query, (rid,))
         rows = cursor.fetchall()
-        if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception as e:
         print("Fail")
     finally:
@@ -425,7 +402,6 @@ def main():
     func = sys.argv[1]
 
     if func == "import":
-        # Command: python3 project.py import folderName
         if len(sys.argv) != 3:
             print("Fail")
             return
@@ -433,7 +409,6 @@ def main():
         import_data(folder)
 
     elif func == "insertViewer":
-        # Command: python3 project.py insertViewer [uid] [email] [nickname] [street] [city] [state] [zip] [genres] [joined_date] [first] [last] [subscription]
         if len(sys.argv) != 14:
             print("Fail")
             return
