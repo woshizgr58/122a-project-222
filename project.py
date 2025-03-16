@@ -139,50 +139,30 @@ def import_data(folder):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Drop tables in proper order.
         cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
         tables = ["Sessions", "Reviews", "Movies", "Series", "Videos", "Viewers", "Producers", "Users", "`Releases`"]
         for t in tables:
             cursor.execute(f"DROP TABLE IF EXISTS {t};")
         conn.commit()
 
-        # Create tables
         createTable(cursor)
         conn.commit()
         cursor.execute("SET FOREIGN_KEY_CHECKS=1;")
         conn.commit()
 
-        # Load CSV files directly. The CSV file names must exactly match the table names.
-        def load_csv(table_name, num_cols):
-            file_path = os.path.join(folder, f"{table_name}.csv")
-            if not os.path.isfile(file_path):
-                return
-            with open(file_path, newline='', encoding='utf-8') as csvfile:
-                reader = csv.reader(csvfile)
-                rows = list(reader)
-                if not rows:
-                    return
-                placeholders = ",".join(["%s"] * num_cols)
-                query = f"INSERT INTO {table_name} VALUES ({placeholders});"
-                for row in rows:
-                    row = [col if col != "" else None for col in row]
-                    cursor.execute(query, row)
+        # Open the instructions file that contains load commands.
+        with open(f"{folder}/load_data_instructions.txt") as file:
+            for line in file:
+                cmds = line.split(' ')
+                cmds[4] = f"'{folder}/{cmds[4][1:-1]}'"
+                cursor.execute(' '.join(cmds).strip())
                 conn.commit()
-
-        load_csv("Releases", 5)   # rid, producer_uid, title, genre, release_date
-        load_csv("Users", 9)      # uid, email, joined_date, nickname, street, city, state, zip, genres
-        load_csv("Producers", 3)  # uid, bio, company
-        load_csv("Viewers", 4)    # uid, subscription, first_name, last_name
-        load_csv("Movies", 2)
-        load_csv("Series", 2)     # Adjust if necessary (e.g., rid, introduction)
-        load_csv("Videos", 4)
-        load_csv("Sessions", 8)
-        load_csv("Reviews", 6)    # rvid, uid, rid, rating, body, posted_at
 
         print("Success")
     except Exception as e:
         print("Fail", e)
     finally:
+        file.close()
         cursor.close()
         conn.close()
 
@@ -230,13 +210,13 @@ def insert_viewer(params):
 # 3) Add Genre
 ##############################
 def add_genre(uid, genre):
-    # In HW2, genres is stored in Users.genres as a comma-separated list.
+    # In HW2, genres is stored in Users.genres as a semicolon-separated list.
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("SELECT genres FROM Users WHERE uid = %s;", (uid,))
         result = cursor.fetchone()
-        # If no user found, print "Success" (per test_addGenre1 expectation)
+        # If no user found, print "Success" per test_addGenre1 expectation.
         if result is None:
             print("Success")
             return
@@ -246,13 +226,13 @@ def add_genre(uid, genre):
         if current == "":
             new_genres = new_genre
         else:
-            # Split on commas.
-            current_list = [g.strip().lower() for g in current.split(',')]
+            # Split on semicolons.
+            current_list = [g.strip().lower() for g in current.split(';')]
             if new_genre.lower() in current_list:
                 print("Fail")
                 return
             else:
-                new_genres = current + "," + new_genre
+                new_genres = current + ";" + new_genre
         cursor.execute("UPDATE Users SET genres = %s WHERE uid = %s;", (new_genres, uid))
         conn.commit()
         print("Success")
@@ -358,7 +338,6 @@ def list_releases(uid):
         cursor.execute(query, (uid,))
         rows = cursor.fetchall()
         if not rows:
-            print("Fail")
             return
         for row in rows:
             print(",".join(str(x) for x in row))
@@ -386,7 +365,6 @@ def popular_release(N):
         cursor.execute(query, (N,))
         rows = cursor.fetchall()
         if not rows:
-            print("Fail")
             return
         for row in rows:
             print(",".join(str(x) for x in row))
@@ -431,12 +409,12 @@ def active_viewer(N, start_date, end_date):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Use full datetime comparison (remove DATE() wrapper if hidden tests expect full values)
+        # Use DATE() on initiate_at for date-only comparison.
         query = """
             SELECT v.uid, v.first_name, v.last_name
             FROM Viewers v
             JOIN Sessions s ON v.uid = s.uid
-            WHERE s.initiate_at BETWEEN %s AND %s
+            WHERE DATE(s.initiate_at) BETWEEN %s AND %s
             GROUP BY v.uid, v.first_name, v.last_name
             HAVING COUNT(s.sid) >= %s
             ORDER BY v.uid ASC;
@@ -444,7 +422,6 @@ def active_viewer(N, start_date, end_date):
         cursor.execute(query, (start_date, end_date, N))
         rows = cursor.fetchall()
         if not rows:
-            print("Fail")
             return
         for row in rows:
             print(",".join(str(x) for x in row))
@@ -474,7 +451,6 @@ def videos_viewed(rid):
         cursor.execute(query, (rid,))
         rows = cursor.fetchall()
         if not rows:
-            print("Fail")
             return
         for row in rows:
             print(",".join(str(x) for x in row))
