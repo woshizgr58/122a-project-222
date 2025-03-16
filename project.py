@@ -196,7 +196,6 @@ def add_genre(uid, genre):
     # In HW2, genres is stored in Users.genres as a comma-separated list.
     conn = get_connection()
     cursor = conn.cursor()
-    try:
         # cursor.execute("SELECT genres FROM Users WHERE uid = %s;", (uid,))
         # result = cursor.fetchone()
         # # If no user found, print "Fail"
@@ -216,14 +215,15 @@ def add_genre(uid, genre):
         #         return
         #     else:
         #         new_genres = current + "," + new_genre
-        cursor.execute("UPDATE Users SET genres = CONCAT(genres, ';', %s) WHERE uid = %s", (genre, uid))
-        conn.commit()
-        print("Success")
-    except Exception:
-        print("Fail")
-    finally:
-        cursor.close()
-        conn.close()
+    cursor.execute("UPDATE Users SET genres = CONCAT(genres, ';', %s) WHERE uid = %s", (genre, uid))
+    conn.commit()
+    if cursor.rowcount > 0:
+        print("Update succeeded")
+    else:
+        print("Update failed or no rows matched")
+
+    cursor.close()
+    conn.close()
 
 ##############################
 # 4) Delete Viewer
