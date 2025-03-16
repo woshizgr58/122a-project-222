@@ -161,8 +161,9 @@ def add_genre(uid, genre):
     try:
         cursor.execute("SELECT genres FROM Viewer WHERE uid = %s;", (uid,))
         result = cursor.fetchone()
+        # If viewer doesn't exist, we now print "Success" per discussion.
         if result is None:
-            print("Fail")
+            print("Success")
             return
         current = result[0] if result[0] is not None else ""
         current = current.strip()
@@ -274,11 +275,9 @@ def list_releases(uid):
         """
         cursor.execute(query, (uid,))
         rows = cursor.fetchall()
-        if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+        # For query functions, if no rows, print nothing.
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -302,11 +301,8 @@ def popular_release(N):
         """
         cursor.execute(query, (N,))
         rows = cursor.fetchall()
-        if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -330,11 +326,8 @@ def release_title(sid):
         """
         cursor.execute(query, (sid,))
         rows = cursor.fetchall()
-        if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join("" if x is None else str(x) for x in row))
+        for row in rows:
+            print(",".join("" if x is None else str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -348,23 +341,20 @@ def active_viewer(N, start_date, end_date):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Use DATE() on initiate_at to compare only dates.
+        # Directly compare s.initiate_at with the provided datetime strings.
         query = """
             SELECT v.uid, v.first, v.last
             FROM Viewer v
             JOIN Session s ON v.uid = s.uid
-            WHERE DATE(s.initiate_at) BETWEEN %s AND %s
+            WHERE s.initiate_at BETWEEN %s AND %s
             GROUP BY v.uid, v.first, v.last
             HAVING COUNT(s.sid) >= %s
             ORDER BY v.uid ASC;
         """
         cursor.execute(query, (start_date, end_date, N))
         rows = cursor.fetchall()
-        if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -382,18 +372,16 @@ def videos_viewed(rid):
             SELECT v.rid, v.ep_num, v.title, v.length,
                    COUNT(DISTINCT s.uid) AS viewerCount
             FROM Video v
-            LEFT JOIN Session s ON v.rid = s.rid AND v.ep_num = s.ep_num
+            LEFT JOIN Session s
+              ON v.rid = s.rid AND v.ep_num = s.ep_num
             WHERE v.rid = %s
             GROUP BY v.rid, v.ep_num, v.title, v.length
             ORDER BY v.rid DESC, v.ep_num ASC;
         """
         cursor.execute(query, (rid,))
         rows = cursor.fetchall()
-        if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -420,20 +408,9 @@ def main():
             return
         try:
             uid = int(sys.argv[2])
-            params = [
-                uid,
-                sys.argv[3],
-                sys.argv[4],
-                sys.argv[5],
-                sys.argv[6],
-                sys.argv[7],
-                sys.argv[8],
-                sys.argv[9],
-                sys.argv[10],
-                sys.argv[11],
-                sys.argv[12],
-                sys.argv[13],
-            ]
+            params = [uid, sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6],
+                      sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10],
+                      sys.argv[11], sys.argv[12], sys.argv[13]]
         except:
             print("Fail")
             return
