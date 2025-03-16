@@ -222,7 +222,7 @@ def add_genre(uid, genre):
     if cursor.rowcount > 0:
         print("Success")
     else:
-        print("Fail")
+        print("Fail", cursor.rowcount)
 
     cursor.close()
     conn.close()
