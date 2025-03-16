@@ -33,7 +33,7 @@ def import_data(folder):
         # Create Users table (from HW2)
         create_users = """
             CREATE TABLE Users (
-                uid INT PRIMARY KEY,
+                uid INT,
                 email TEXT NOT NULL,
                 joined_date DATE NOT NULL,
                 nickname TEXT NOT NULL,
@@ -41,16 +41,18 @@ def import_data(folder):
                 city TEXT,
                 state TEXT,
                 zip TEXT,
-                genres TEXT
+                genres TEXT,
+                PRIMARY KEY (uid)
             );
         """
         # Create Viewers table (delta table for ISA)
         create_viewers = """
             CREATE TABLE Viewers (
-                uid INT PRIMARY KEY,
+                uid INT,
                 subscription ENUM('free','monthly','yearly'),
-                first TEXT NOT NULL,
-                last TEXT NOT NULL,
+                first_name TEXT NOT NULL,
+                last_name TEXT NOT NULL,
+                PRIMARY KEY (uid),
                 FOREIGN KEY (uid) REFERENCES Users(uid) ON DELETE CASCADE
             );
         """
@@ -131,10 +133,10 @@ def import_data(folder):
                     cursor.execute(query, row)
                 conn.commit()
 
-        # CSV files should be named exactly as table names.
+        # CSV filenames should exactly match table names.
         load_csv("Releases", 3)
         load_csv("Users", 9)      # uid, email, joined_date, nickname, street, city, state, zip, genres
-        load_csv("Viewers", 4)    # uid, subscription, first, last
+        load_csv("Viewers", 4)    # uid, subscription, first_name, last_name
         load_csv("Movies", 2)
         load_csv("Sessions", 8)
         load_csv("Reviews", 3)
@@ -151,7 +153,7 @@ def import_data(folder):
 # 2) Insert Viewer
 ##############################
 def insert_viewer(params):
-    # Expected order: uid, email, nickname, street, city, state, zip, genres, joined_date, first, last, subscription
+    # Expected order: uid, email, nickname, street, city, state, zip, genres, joined_date, first_name, last_name, subscription
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -168,17 +170,17 @@ def insert_viewer(params):
         zip_code = params[6]
         genres = params[7]
         joined_date = params[8]
-        first = params[9]
-        last = params[10]
+        first_name = params[9]
+        last_name = params[10]
         subscription = params[11]
         cursor.execute(query_users, (uid, email, joined_date, nickname, street, city, state, zip_code, genres))
         conn.commit()
 
         query_viewers = """
-            INSERT INTO Viewers (uid, subscription, first, last)
+            INSERT INTO Viewers (uid, subscription, first_name, last_name)
             VALUES (%s, %s, %s, %s);
         """
-        cursor.execute(query_viewers, (uid, subscription, first, last))
+        cursor.execute(query_viewers, (uid, subscription, first_name, last_name))
         conn.commit()
         print("Success")
     except Exception:
@@ -195,7 +197,7 @@ def add_genre(uid, genre):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT genres FROM Users WHERE uid = %;", (uid,))
+        cursor.execute("SELECT genres FROM Users WHERE uid = %s;", (uid,))
         result = cursor.fetchone()
         # If no user found, print "Fail"
         if result is None:
@@ -319,7 +321,6 @@ def list_releases(uid):
         cursor.execute(query, (uid,))
         rows = cursor.fetchall()
         if not rows:
-            # If no rows, print nothing.
             return
         for row in rows:
             print(",".join(str(x) for x in row))
@@ -392,11 +393,11 @@ def active_viewer(N, start_date, end_date):
     try:
         # Use DATE() on initiate_at for date-only comparison.
         query = """
-            SELECT v.uid, v.first, v.last
+            SELECT v.uid, v.first_name, v.last_name
             FROM Viewers v
             JOIN Sessions s ON v.uid = s.uid
             WHERE DATE(s.initiate_at) BETWEEN %s AND %s
-            GROUP BY v.uid, v.first, v.last
+            GROUP BY v.uid, v.first_name, v.last_name
             HAVING COUNT(s.sid) >= %s
             ORDER BY v.uid ASC;
         """
