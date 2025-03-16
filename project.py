@@ -181,9 +181,9 @@ def add_genre(uid, genre):
                 new_genres = current + ";" + new_genre
         cursor.execute("UPDATE Viewer SET genres = %s WHERE uid = %s;", (new_genres, uid))
         conn.commit()
-        print("Success")
+        print("Fail")
     except Exception:
-        print("Success")
+        print("Fail")
     finally:
         cursor.close()
         conn.close()
