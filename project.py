@@ -25,7 +25,7 @@ def import_data(folder):
     try:
         cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
         # Drop tables in proper order.
-        tables = ["Session", "Review", "Movie", "Video", "Viewers", "Users", "`Release`"]
+        tables = ["Sessions", "Reviews", "Movies", "Videos", "Viewers", "Users", "`Releases`"]
         for t in tables:
             cursor.execute(f"DROP TABLE IF EXISTS {t};")
         conn.commit()
@@ -54,23 +54,23 @@ def import_data(folder):
                 FOREIGN KEY (uid) REFERENCES Users(uid) ON DELETE CASCADE
             );
         """
-        # The remaining tables we follow our original design.
-        create_release = """
-            CREATE TABLE `Release` (
+        # Remaining tables per HW2 solution or your design.
+        create_releases = """
+            CREATE TABLE Releases (
                 rid INT PRIMARY KEY,
                 genre VARCHAR(255),
                 title VARCHAR(255)
             );
         """
-        create_movie = """
-            CREATE TABLE Movie (
+        create_movies = """
+            CREATE TABLE Movies (
                 rid INT PRIMARY KEY,
                 website_url VARCHAR(255),
-                FOREIGN KEY (rid) REFERENCES `Release`(rid)
+                FOREIGN KEY (rid) REFERENCES Releases(rid)
             );
         """
-        create_session = """
-            CREATE TABLE Session (
+        create_sessions = """
+            CREATE TABLE Sessions (
                 sid INT PRIMARY KEY,
                 uid INT,
                 rid INT,
@@ -80,30 +80,30 @@ def import_data(folder):
                 quality VARCHAR(50),
                 device VARCHAR(50),
                 FOREIGN KEY (uid) REFERENCES Viewers(uid),
-                FOREIGN KEY (rid) REFERENCES `Release`(rid)
+                FOREIGN KEY (rid) REFERENCES Releases(rid)
             );
         """
-        create_review = """
-            CREATE TABLE Review (
+        create_reviews = """
+            CREATE TABLE Reviews (
                 uid INT,
                 rid INT,
                 review TEXT,
                 PRIMARY KEY (uid, rid),
                 FOREIGN KEY (uid) REFERENCES Viewers(uid),
-                FOREIGN KEY (rid) REFERENCES `Release`(rid)
+                FOREIGN KEY (rid) REFERENCES Releases(rid)
             );
         """
-        create_video = """
-            CREATE TABLE Video (
+        create_videos = """
+            CREATE TABLE Videos (
                 rid INT,
                 ep_num INT,
                 title VARCHAR(255),
                 length INT,
                 PRIMARY KEY (rid, ep_num),
-                FOREIGN KEY (rid) REFERENCES `Release`(rid)
+                FOREIGN KEY (rid) REFERENCES Releases(rid)
             );
         """
-        ddl_statements = [create_users, create_viewers, create_release, create_movie, create_session, create_review, create_video]
+        ddl_statements = [create_users, create_viewers, create_releases, create_movies, create_sessions, create_reviews, create_videos]
         for ddl in ddl_statements:
             cursor.execute(ddl)
         conn.commit()
@@ -127,14 +127,14 @@ def import_data(folder):
                     cursor.execute(query, row)
                 conn.commit()
 
-        # CSV files are assumed to match table names:
-        load_csv("Release", 3)
+        # Load CSV files; filenames should match table names.
+        load_csv("Releases", 3)
         load_csv("Users", 9)      # uid, email, joined_date, nickname, street, city, state, zip, genres
         load_csv("Viewers", 4)    # uid, subscription, first, last
-        load_csv("Movie", 2)
-        load_csv("Session", 8)
-        load_csv("Review", 3)
-        load_csv("Video", 4)
+        load_csv("Movies", 2)
+        load_csv("Sessions", 8)
+        load_csv("Reviews", 3)
+        load_csv("Videos", 4)
 
         print("Success")
     except Exception:
@@ -193,7 +193,7 @@ def add_genre(uid, genre):
     try:
         cursor.execute("SELECT genres FROM Users WHERE uid = %s;", (uid,))
         result = cursor.fetchone()
-        # If no viewer found, per revised expectation, print "Success"
+        # If no viewer found, print "Success" (per discussion)
         if result is None:
             print("Success")
             return
@@ -226,8 +226,8 @@ def delete_viewer(uid):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("DELETE FROM Session WHERE uid = %s;", (uid,))
-        cursor.execute("DELETE FROM Review WHERE uid = %s;", (uid,))
+        cursor.execute("DELETE FROM Sessions WHERE uid = %s;", (uid,))
+        cursor.execute("DELETE FROM Reviews WHERE uid = %s;", (uid,))
         cursor.execute("DELETE FROM Viewers WHERE uid = %s;", (uid,))
         conn.commit()
         print("Success")
@@ -245,7 +245,7 @@ def insert_movie(rid, website_url):
     cursor = conn.cursor()
     try:
         cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
-        query = "INSERT INTO Movie (rid, website_url) VALUES (%s, %s);"
+        query = "INSERT INTO Movies (rid, website_url) VALUES (%s, %s);"
         cursor.execute(query, (rid, website_url))
         conn.commit()
         cursor.execute("SET FOREIGN_KEY_CHECKS=1;")
@@ -265,7 +265,7 @@ def insert_session(params):
     try:
         cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
         query = """
-            INSERT INTO Session
+            INSERT INTO Sessions
             (sid, uid, rid, ep_num, initiate_at, leave_at, quality, device)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
         """
@@ -286,10 +286,10 @@ def update_release(rid, title):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        query = "UPDATE `Release` SET title = %s WHERE rid = %s;"
+        query = "UPDATE `Releases` SET title = %s WHERE rid = %s;"
         cursor.execute(query, (title, rid))
         if cursor.rowcount == 0:
-            cursor.execute("INSERT INTO `Release` (rid, genre, title) VALUES (%s, %s, %s);", (rid, "", title))
+            cursor.execute("INSERT INTO `Releases` (rid, genre, title) VALUES (%s, %s, %s);", (rid, "", title))
         conn.commit()
         print("Success")
     except Exception:
@@ -307,18 +307,18 @@ def list_releases(uid):
     try:
         query = """
             SELECT DISTINCT r.rid, r.genre, r.title
-            FROM Review rv
-            JOIN `Release` r ON rv.rid = r.rid
+            FROM Reviews rv
+            JOIN `Releases` r ON rv.rid = r.rid
             WHERE rv.uid = %s
             ORDER BY r.title ASC;
         """
         cursor.execute(query, (uid,))
         rows = cursor.fetchall()
         if not rows:
-            # If no rows, output nothing.
-            return
-        for row in rows:
-            print(",".join(str(x) for x in row))
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -334,8 +334,8 @@ def popular_release(N):
     try:
         query = """
             SELECT r.rid, r.title, COUNT(rv.uid) AS reviewCount
-            FROM `Release` r
-            LEFT JOIN Review rv ON r.rid = rv.rid
+            FROM `Releases` r
+            LEFT JOIN Reviews rv ON r.rid = rv.rid
             GROUP BY r.rid, r.title
             ORDER BY reviewCount DESC, r.rid DESC
             LIMIT %s;
@@ -343,9 +343,10 @@ def popular_release(N):
         cursor.execute(query, (N,))
         rows = cursor.fetchall()
         if not rows:
-            return
-        for row in rows:
-            print(",".join(str(x) for x in row))
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -361,18 +362,19 @@ def release_title(sid):
     try:
         query = """
             SELECT r.rid, r.title, r.genre, IFNULL(v.title,''), s.ep_num, IFNULL(v.length,0)
-            FROM Session s
-            JOIN `Release` r ON s.rid = r.rid
-            LEFT JOIN Video v ON s.rid = v.rid AND s.ep_num = v.ep_num
+            FROM Sessions s
+            JOIN `Releases` r ON s.rid = r.rid
+            LEFT JOIN Videos v ON s.rid = v.rid AND s.ep_num = v.ep_num
             WHERE s.sid = %s
             ORDER BY r.title ASC;
         """
         cursor.execute(query, (sid,))
         rows = cursor.fetchall()
         if not rows:
-            return
-        for row in rows:
-            print(",".join("" if x is None else str(x) for x in row))
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join("" if x is None else str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -390,7 +392,7 @@ def active_viewer(N, start_date, end_date):
         query = """
             SELECT v.uid, v.first, v.last
             FROM Viewers v
-            JOIN Session s ON v.uid = s.uid
+            JOIN Sessions s ON v.uid = s.uid
             WHERE s.initiate_at BETWEEN %s AND %s
             GROUP BY v.uid, v.first, v.last
             HAVING COUNT(s.sid) >= %s
@@ -399,9 +401,10 @@ def active_viewer(N, start_date, end_date):
         cursor.execute(query, (start_date, end_date, N))
         rows = cursor.fetchall()
         if not rows:
-            return
-        for row in rows:
-            print(",".join(str(x) for x in row))
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -418,8 +421,8 @@ def videos_viewed(rid):
         query = """
             SELECT v.rid, v.ep_num, v.title, v.length,
                    COUNT(DISTINCT s.uid) AS viewerCount
-            FROM Video v
-            LEFT JOIN Session s
+            FROM Videos v
+            LEFT JOIN Sessions s
               ON v.rid = s.rid AND v.ep_num = s.ep_num
             WHERE v.rid = %s
             GROUP BY v.rid, v.ep_num, v.title, v.length
@@ -428,9 +431,10 @@ def videos_viewed(rid):
         cursor.execute(query, (rid,))
         rows = cursor.fetchall()
         if not rows:
-            return
-        for row in rows:
-            print(",".join(str(x) for x in row))
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
