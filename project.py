@@ -163,7 +163,7 @@ def add_genre(uid, genre):
         result = cursor.fetchone()
         # If no viewer exists, per test_addGenre1, print "Success"
         if result is None:
-            print("Success")
+            print("Fail")
             return
         current = result[0] if result[0] is not None else ""
         current = current.strip()
@@ -181,7 +181,7 @@ def add_genre(uid, genre):
                 new_genres = current + ";" + new_genre
         cursor.execute("UPDATE Viewer SET genres = %s WHERE uid = %s;", (new_genres, uid))
         conn.commit()
-        print("Fail")
+        print("Success")
     except Exception:
         print("Fail")
     finally:
