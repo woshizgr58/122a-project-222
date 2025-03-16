@@ -23,33 +23,43 @@ def import_data(folder):
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        # Drop tables in proper order.
         cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
-        tables = ["Session", "Review", "Movie", "Video", "Viewer", "`Release`"]
+        # Order matters: drop dependent tables first.
+        tables = ["Session", "Review", "Movie", "Video", "Viewers", "Users", "`Release`"]
         for t in tables:
             cursor.execute(f"DROP TABLE IF EXISTS {t};")
         conn.commit()
 
+        # Create tables based on HW2 solution for Users and Viewers.
+        create_users = """
+            CREATE TABLE Users (
+                uid INT PRIMARY KEY,
+                email TEXT NOT NULL,
+                joined_date DATE NOT NULL,
+                nickname TEXT NOT NULL,
+                street TEXT,
+                city TEXT,
+                state TEXT,
+                zip TEXT,
+                genres TEXT
+            );
+        """
+        create_viewers = """
+            CREATE TABLE Viewers (
+                uid INT PRIMARY KEY,
+                subscription ENUM('free', 'monthly', 'yearly'),
+                first_name TEXT NOT NULL,
+                last_name TEXT NOT NULL,
+                FOREIGN KEY (uid) REFERENCES Users(uid) ON DELETE CASCADE
+            );
+        """
+        # For the remaining tables, we use your original definitions.
         create_release = """
             CREATE TABLE `Release` (
                 rid INT PRIMARY KEY,
                 genre VARCHAR(255),
                 title VARCHAR(255)
-            );
-        """
-        create_viewer = """
-            CREATE TABLE Viewer (
-                uid INT PRIMARY KEY,
-                email VARCHAR(255),
-                nickname VARCHAR(255),
-                street VARCHAR(255),
-                city VARCHAR(255),
-                state VARCHAR(50),
-                zip VARCHAR(20),
-                genres VARCHAR(255),
-                joined_date DATE,
-                first VARCHAR(255),
-                last VARCHAR(255),
-                subscription VARCHAR(50)
             );
         """
         create_movie = """
@@ -69,7 +79,7 @@ def import_data(folder):
                 leave_at DATETIME,
                 quality VARCHAR(50),
                 device VARCHAR(50),
-                FOREIGN KEY (uid) REFERENCES Viewer(uid),
+                FOREIGN KEY (uid) REFERENCES Viewers(uid),
                 FOREIGN KEY (rid) REFERENCES `Release`(rid)
             );
         """
@@ -79,7 +89,7 @@ def import_data(folder):
                 rid INT,
                 review TEXT,
                 PRIMARY KEY (uid, rid),
-                FOREIGN KEY (uid) REFERENCES Viewer(uid),
+                FOREIGN KEY (uid) REFERENCES Viewers(uid),
                 FOREIGN KEY (rid) REFERENCES `Release`(rid)
             );
         """
@@ -93,13 +103,15 @@ def import_data(folder):
                 FOREIGN KEY (rid) REFERENCES `Release`(rid)
             );
         """
-        for ddl in [create_release, create_viewer, create_movie, create_session, create_review, create_video]:
+        ddl_statements = [create_users, create_viewers, create_release, create_movie, create_session, create_review, create_video]
+        for ddl in ddl_statements:
             cursor.execute(ddl)
         conn.commit()
 
         cursor.execute("SET FOREIGN_KEY_CHECKS=1;")
         conn.commit()
 
+        # Helper function to load CSV data
         def load_csv(table_name, num_cols):
             file_path = os.path.join(folder, f"{table_name}.csv")
             if not os.path.isfile(file_path):
@@ -116,8 +128,11 @@ def import_data(folder):
                     cursor.execute(query, row)
                 conn.commit()
 
+        # The CSV files are assumed to be named as per table names.
+        # For HW2, viewer information is split between Users and Viewers.
         load_csv("Release", 3)
-        load_csv("Viewer", 12)
+        load_csv("Users", 9)      # uid, email, joined_date, nickname, street, city, state, zip, genres
+        load_csv("Viewers", 4)    # uid, subscription, first_name, last_name
         load_csv("Movie", 2)
         load_csv("Session", 8)
         load_csv("Review", 3)
@@ -134,16 +149,38 @@ def import_data(folder):
 # 2) Insert Viewer
 ##############################
 def insert_viewer(params):
+    # Expected parameters (from command line):
+    # uid, email, nickname, street, city, state, zip, genres, joined_date, first, last, subscription
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        query = """
-            INSERT INTO Viewer
-            (uid, email, nickname, street, city, state, zip, genres,
-             joined_date, first, last, subscription)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+        # Insert into Users table.
+        query_users = """
+            INSERT INTO Users (uid, email, joined_date, nickname, street, city, state, zip, genres)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
         """
-        cursor.execute(query, tuple(params))
+        # Note: In the HW2 solution, joined_date comes before nickname.
+        uid = params[0]
+        email = params[1]
+        nickname = params[2]
+        street = params[3]
+        city = params[4]
+        state = params[5]
+        zip_code = params[6]
+        genres = params[7]
+        joined_date = params[8]
+        first = params[9]
+        last = params[10]
+        subscription = params[11]
+        cursor.execute(query_users, (uid, email, joined_date, nickname, street, city, state, zip_code, genres))
+        conn.commit()
+
+        # Insert into Viewers table.
+        query_viewers = """
+            INSERT INTO Viewers (uid, subscription, first_name, last_name)
+            VALUES (%s, %s, %s, %s);
+        """
+        cursor.execute(query_viewers, (uid, subscription, first, last))
         conn.commit()
         print("Success")
     except Exception:
@@ -159,27 +196,24 @@ def add_genre(uid, genre):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT genres FROM Viewer WHERE uid = %s;", (uid,))
+        cursor.execute("SELECT genres FROM Users WHERE uid = %s;", (uid,))
         result = cursor.fetchone()
-        # If no viewer exists, per test_addGenre1, print "Success"
-        # if result is None:
-        #     print("Success")
-        #     return
+        if result is None:
+            print("Fail")
+            return
         current = result[0] if result[0] is not None else ""
         current = current.strip()
-        # Remove extra whitespace from input genre too.
         new_genre = genre.strip()
         if current == "":
             new_genres = new_genre
         else:
-            # Build a list of existing genres in lowercase (after stripping)
-            current_list = [g.strip().lower() for g in current.split(';')]
+            current_list = [g.strip().lower() for g in current.split(',')]
             if new_genre.lower() in current_list:
                 print("Fail")
                 return
             else:
-                new_genres = current + ";" + new_genre
-        cursor.execute("UPDATE Viewer SET genres = %s WHERE uid = %s;", (new_genres, uid))
+                new_genres = current + "," + new_genre
+        cursor.execute("UPDATE Users SET genres = %s WHERE uid = %s;", (new_genres, uid))
         conn.commit()
         print("Success")
     except Exception:
@@ -195,9 +229,11 @@ def delete_viewer(uid):
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        # Delete sessions and reviews associated with this viewer.
         cursor.execute("DELETE FROM Session WHERE uid = %s;", (uid,))
         cursor.execute("DELETE FROM Review WHERE uid = %s;", (uid,))
-        cursor.execute("DELETE FROM Viewer WHERE uid = %s;", (uid,))
+        # Delete from Viewers; due to ON DELETE CASCADE, corresponding Users row will be deleted.
+        cursor.execute("DELETE FROM Viewers WHERE uid = %s;", (uid,))
         conn.commit()
         print("Success")
     except Exception:
@@ -283,9 +319,11 @@ def list_releases(uid):
         """
         cursor.execute(query, (uid,))
         rows = cursor.fetchall()
-        # For query functions, if no rows, print nothing.
-        for row in rows:
-            print(",".join(str(x) for x in row))
+        if not rows:
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -309,8 +347,11 @@ def popular_release(N):
         """
         cursor.execute(query, (N,))
         rows = cursor.fetchall()
-        for row in rows:
-            print(",".join(str(x) for x in row))
+        if not rows:
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -334,8 +375,11 @@ def release_title(sid):
         """
         cursor.execute(query, (sid,))
         rows = cursor.fetchall()
-        for row in rows:
-            print(",".join("" if x is None else str(x) for x in row))
+        if not rows:
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join("" if x is None else str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -349,20 +393,23 @@ def active_viewer(N, start_date, end_date):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Directly compare s.initiate_at with the provided datetime strings.
+        # Use DATE() on initiate_at for date-only comparison.
         query = """
             SELECT v.uid, v.first, v.last
-            FROM Viewer v
+            FROM Viewers v
             JOIN Session s ON v.uid = s.uid
-            WHERE s.initiate_at BETWEEN %s AND %s
+            WHERE DATE(s.initiate_at) BETWEEN %s AND %s
             GROUP BY v.uid, v.first, v.last
             HAVING COUNT(s.sid) >= %s
             ORDER BY v.uid ASC;
         """
         cursor.execute(query, (start_date, end_date, N))
         rows = cursor.fetchall()
-        for row in rows:
-            print(",".join(str(x) for x in row))
+        if not rows:
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -388,8 +435,11 @@ def videos_viewed(rid):
         """
         cursor.execute(query, (rid,))
         rows = cursor.fetchall()
-        for row in rows:
-            print(",".join(str(x) for x in row))
+        if not rows:
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
