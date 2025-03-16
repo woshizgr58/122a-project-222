@@ -195,11 +195,11 @@ def add_genre(uid, genre):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT genres FROM Users WHERE uid = %s;", (uid,))
+        cursor.execute("SELECT genres FROM Users WHERE uid = %;", (uid,))
         result = cursor.fetchone()
         # If no user found, print "Fail"
         if result is None:
-            print("monkey")
+            print("Fail")
             return
         current = result[0] if result[0] is not None else ""
         current = current.strip()
