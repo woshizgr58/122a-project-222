@@ -12,7 +12,7 @@ def get_connection():
     try:
         conn = mysql.connector.connect(user='test', password='password', database='cs122a')
         return conn
-    except Error as e:
+    except Error:
         print("Fail")
         sys.exit(1)
 
@@ -169,11 +169,7 @@ def add_genre(uid, genre):
         if current == "":
             new_genres = genre
         else:
-            current_list = [g.strip().lower() for g in current.split(';')]
-            if genre.lower() in current_list:
-                new_genres = current  # do not add duplicate
-            else:
-                new_genres = current + ";" + genre
+            new_genres = current + ";" + genre
         cursor.execute("UPDATE Viewer SET genres = %s WHERE uid = %s;", (new_genres, uid))
         conn.commit()
         print("Success")
@@ -279,10 +275,10 @@ def list_releases(uid):
         cursor.execute(query, (uid,))
         rows = cursor.fetchall()
         if not rows:
-            # When there are no rows, print nothing.
-            return
-        for row in rows:
-            print(",".join(str(x) for x in row))
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -307,9 +303,10 @@ def popular_release(N):
         cursor.execute(query, (N,))
         rows = cursor.fetchall()
         if not rows:
-            return
-        for row in rows:
-            print(",".join(str(x) for x in row))
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -334,9 +331,10 @@ def release_title(sid):
         cursor.execute(query, (sid,))
         rows = cursor.fetchall()
         if not rows:
-            return
-        for row in rows:
-            print(",".join("" if x is None else str(x) for x in row))
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join("" if x is None else str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -347,28 +345,26 @@ def release_title(sid):
 # 11) Active Viewers
 ##############################
 def active_viewer(N, start_date, end_date):
-    # Use a subquery to ensure only viewers with at least N sessions in the date range are returned.
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        # Use DATE() on initiate_at to compare only dates.
         query = """
             SELECT v.uid, v.first, v.last
             FROM Viewer v
-            WHERE v.uid IN (
-                SELECT s.uid
-                FROM Session s
-                WHERE s.initiate_at BETWEEN %s AND %s
-                GROUP BY s.uid
-                HAVING COUNT(s.sid) >= %s
-            )
+            JOIN Session s ON v.uid = s.uid
+            WHERE DATE(s.initiate_at) BETWEEN %s AND %s
+            GROUP BY v.uid, v.first, v.last
+            HAVING COUNT(s.sid) >= %s
             ORDER BY v.uid ASC;
         """
         cursor.execute(query, (start_date, end_date, N))
         rows = cursor.fetchall()
         if not rows:
-            return
-        for row in rows:
-            print(",".join(str(x) for x in row))
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -386,8 +382,7 @@ def videos_viewed(rid):
             SELECT v.rid, v.ep_num, v.title, v.length,
                    COUNT(DISTINCT s.uid) AS viewerCount
             FROM Video v
-            LEFT JOIN Session s
-              ON v.rid = s.rid AND v.ep_num = s.ep_num
+            LEFT JOIN Session s ON v.rid = s.rid AND v.ep_num = s.ep_num
             WHERE v.rid = %s
             GROUP BY v.rid, v.ep_num, v.title, v.length
             ORDER BY v.rid DESC, v.ep_num ASC;
@@ -395,9 +390,10 @@ def videos_viewed(rid):
         cursor.execute(query, (rid,))
         rows = cursor.fetchall()
         if not rows:
-            return
-        for row in rows:
-            print(",".join(str(x) for x in row))
+            print("Fail")
+        else:
+            for row in rows:
+                print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
