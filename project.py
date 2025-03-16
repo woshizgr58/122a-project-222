@@ -20,20 +20,15 @@ def get_connection():
 # 1) Import Data
 ##############################
 def import_data(folder):
-    # DEBUG print
-    print(f"DEBUG: import_data called with folder='{folder}'", file=sys.stderr)
-
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Disable FK checks, drop old tables
         cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
         tables = ["Session", "Review", "Movie", "Video", "Viewer", "`Release`"]
         for t in tables:
             cursor.execute(f"DROP TABLE IF EXISTS {t};")
         conn.commit()
 
-        # Create tables
         create_release = """
             CREATE TABLE `Release` (
                 rid INT PRIMARY KEY,
@@ -105,7 +100,6 @@ def import_data(folder):
         cursor.execute("SET FOREIGN_KEY_CHECKS=1;")
         conn.commit()
 
-        # Load CSV data
         def load_csv(table_name, num_cols):
             file_path = os.path.join(folder, f"{table_name}.csv")
             if not os.path.isfile(file_path):
@@ -130,9 +124,8 @@ def import_data(folder):
         load_csv("Video", 4)
 
         print("Success")
-    except Exception as e:
+    except Exception:
         print("Fail")
-        print(f"DEBUG: import_data error: {e}", file=sys.stderr)
     finally:
         cursor.close()
         conn.close()
@@ -141,8 +134,6 @@ def import_data(folder):
 # 2) Insert Viewer
 ##############################
 def insert_viewer(params):
-    print(f"DEBUG: insert_viewer called with params={params}", file=sys.stderr)
-
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -155,9 +146,8 @@ def insert_viewer(params):
         cursor.execute(query, tuple(params))
         conn.commit()
         print("Success")
-    except Exception as e:
+    except Exception:
         print("Fail")
-        print(f"DEBUG: insert_viewer error: {e}", file=sys.stderr)
     finally:
         cursor.close()
         conn.close()
@@ -166,8 +156,6 @@ def insert_viewer(params):
 # 3) Add Genre
 ##############################
 def add_genre(uid, genre):
-    print(f"DEBUG: add_genre called with uid={uid}, genre='{genre}'", file=sys.stderr)
-
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -176,26 +164,21 @@ def add_genre(uid, genre):
         if result is None:
             print("Fail")
             return
-
         current = result[0] if result[0] is not None else ""
         current = current.strip()
-
         if current == "":
             new_genres = genre
         else:
             current_list = [g.strip().lower() for g in current.split(';')]
             if genre.lower() in current_list:
-                new_genres = current
+                new_genres = current  # do not add duplicate
             else:
                 new_genres = current + ";" + genre
-
         cursor.execute("UPDATE Viewer SET genres = %s WHERE uid = %s;", (new_genres, uid))
         conn.commit()
-
         print("Success")
-    except Exception as e:
+    except Exception:
         print("Fail")
-        print(f"DEBUG: add_genre error: {e}", file=sys.stderr)
     finally:
         cursor.close()
         conn.close()
@@ -204,8 +187,6 @@ def add_genre(uid, genre):
 # 4) Delete Viewer
 ##############################
 def delete_viewer(uid):
-    print(f"DEBUG: delete_viewer called with uid={uid}", file=sys.stderr)
-
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -214,9 +195,8 @@ def delete_viewer(uid):
         cursor.execute("DELETE FROM Viewer WHERE uid = %s;", (uid,))
         conn.commit()
         print("Success")
-    except Exception as e:
+    except Exception:
         print("Fail")
-        print(f"DEBUG: delete_viewer error: {e}", file=sys.stderr)
     finally:
         cursor.close()
         conn.close()
@@ -225,8 +205,6 @@ def delete_viewer(uid):
 # 5) Insert Movie
 ##############################
 def insert_movie(rid, website_url):
-    print(f"DEBUG: insert_movie called with rid={rid}, website_url='{website_url}'", file=sys.stderr)
-
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -236,9 +214,8 @@ def insert_movie(rid, website_url):
         conn.commit()
         cursor.execute("SET FOREIGN_KEY_CHECKS=1;")
         print("Success")
-    except Exception as e:
+    except Exception:
         print("Fail")
-        print(f"DEBUG: insert_movie error: {e}", file=sys.stderr)
     finally:
         cursor.close()
         conn.close()
@@ -247,8 +224,6 @@ def insert_movie(rid, website_url):
 # 6) Insert Session
 ##############################
 def insert_session(params):
-    print(f"DEBUG: insert_session called with params={params}", file=sys.stderr)
-
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -262,9 +237,8 @@ def insert_session(params):
         conn.commit()
         cursor.execute("SET FOREIGN_KEY_CHECKS=1;")
         print("Success")
-    except Exception as e:
+    except Exception:
         print("Fail")
-        print(f"DEBUG: insert_session error: {e}", file=sys.stderr)
     finally:
         cursor.close()
         conn.close()
@@ -273,23 +247,17 @@ def insert_session(params):
 # 7) Update Release
 ##############################
 def update_release(rid, title):
-    print(f"DEBUG: update_release called with rid={rid}, title='{title}'", file=sys.stderr)
-
     conn = get_connection()
     cursor = conn.cursor()
     try:
         query = "UPDATE `Release` SET title = %s WHERE rid = %s;"
         cursor.execute(query, (title, rid))
         if cursor.rowcount == 0:
-            cursor.execute(
-                "INSERT INTO `Release` (rid, genre, title) VALUES (%s, %s, %s);",
-                (rid, "", title),
-            )
+            cursor.execute("INSERT INTO `Release` (rid, genre, title) VALUES (%s, %s, %s);", (rid, "", title))
         conn.commit()
         print("Success")
-    except Exception as e:
+    except Exception:
         print("Fail")
-        print(f"DEBUG: update_release error: {e}", file=sys.stderr)
     finally:
         cursor.close()
         conn.close()
@@ -298,8 +266,6 @@ def update_release(rid, title):
 # 8) List Releases Reviewed by Viewer
 ##############################
 def list_releases(uid):
-    print(f"DEBUG: list_releases called with uid={uid}", file=sys.stderr)
-
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -312,11 +278,13 @@ def list_releases(uid):
         """
         cursor.execute(query, (uid,))
         rows = cursor.fetchall()
+        if not rows:
+            # When there are no rows, print nothing.
+            return
         for row in rows:
             print(",".join(str(x) for x in row))
-    except Exception as e:
+    except Exception:
         print("Fail")
-        print(f"DEBUG: list_releases error: {e}", file=sys.stderr)
     finally:
         cursor.close()
         conn.close()
@@ -325,8 +293,6 @@ def list_releases(uid):
 # 9) Popular Release
 ##############################
 def popular_release(N):
-    print(f"DEBUG: popular_release called with N={N}", file=sys.stderr)
-
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -340,11 +306,12 @@ def popular_release(N):
         """
         cursor.execute(query, (N,))
         rows = cursor.fetchall()
+        if not rows:
+            return
         for row in rows:
             print(",".join(str(x) for x in row))
-    except Exception as e:
+    except Exception:
         print("Fail")
-        print(f"DEBUG: popular_release error: {e}", file=sys.stderr)
     finally:
         cursor.close()
         conn.close()
@@ -353,26 +320,25 @@ def popular_release(N):
 # 10) Title of Release by Session ID
 ##############################
 def release_title(sid):
-    print(f"DEBUG: release_title called with sid={sid}", file=sys.stderr)
-
     conn = get_connection()
     cursor = conn.cursor()
     try:
         query = """
-            SELECT r.rid, r.title, r.genre, v.title, s.ep_num, v.length
+            SELECT r.rid, r.title, r.genre, IFNULL(v.title,''), s.ep_num, IFNULL(v.length,0)
             FROM Session s
             JOIN `Release` r ON s.rid = r.rid
-            JOIN Video v ON s.rid = v.rid AND s.ep_num = v.ep_num
+            LEFT JOIN Video v ON s.rid = v.rid AND s.ep_num = v.ep_num
             WHERE s.sid = %s
             ORDER BY r.title ASC;
         """
         cursor.execute(query, (sid,))
         rows = cursor.fetchall()
+        if not rows:
+            return
         for row in rows:
             print(",".join("" if x is None else str(x) for x in row))
-    except Exception as e:
+    except Exception:
         print("Fail")
-        print(f"DEBUG: release_title error: {e}", file=sys.stderr)
     finally:
         cursor.close()
         conn.close()
@@ -381,28 +347,30 @@ def release_title(sid):
 # 11) Active Viewers
 ##############################
 def active_viewer(N, start_date, end_date):
-    print(f"DEBUG: active_viewer called with N={N}, start='{start_date}', end='{end_date}'", file=sys.stderr)
-
+    # Use a subquery to ensure only viewers with at least N sessions in the date range are returned.
     conn = get_connection()
     cursor = conn.cursor()
     try:
         query = """
             SELECT v.uid, v.first, v.last
             FROM Viewer v
-            JOIN Session s ON v.uid = s.uid
-            WHERE s.initiate_at BETWEEN %s AND %s
-            GROUP BY v.uid, v.first, v.last
-            HAVING COUNT(s.sid) >= %s
+            WHERE v.uid IN (
+                SELECT s.uid
+                FROM Session s
+                WHERE s.initiate_at BETWEEN %s AND %s
+                GROUP BY s.uid
+                HAVING COUNT(s.sid) >= %s
+            )
             ORDER BY v.uid ASC;
         """
         cursor.execute(query, (start_date, end_date, N))
         rows = cursor.fetchall()
+        if not rows:
+            return
         for row in rows:
             print(",".join(str(x) for x in row))
-
-    except Exception as e:
+    except Exception:
         print("Fail")
-        print(f"DEBUG: active_viewer error: {e}", file=sys.stderr)
     finally:
         cursor.close()
         conn.close()
@@ -411,8 +379,6 @@ def active_viewer(N, start_date, end_date):
 # 12) Number of Videos Viewed
 ##############################
 def videos_viewed(rid):
-    print(f"DEBUG: videos_viewed called with rid={rid}", file=sys.stderr)
-
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -428,22 +394,20 @@ def videos_viewed(rid):
         """
         cursor.execute(query, (rid,))
         rows = cursor.fetchall()
+        if not rows:
+            return
         for row in rows:
             print(",".join(str(x) for x in row))
-    except Exception as e:
+    except Exception:
         print("Fail")
-        print(f"DEBUG: videos_viewed error: {e}", file=sys.stderr)
     finally:
         cursor.close()
         conn.close()
 
 ##############################
-# Main
+# Main Dispatch
 ##############################
 def main():
-    # Debug: show full sys.argv for every run
-    print(f"DEBUG: sys.argv={sys.argv}", file=sys.stderr)
-
     if len(sys.argv) < 2:
         print("Fail")
         return
@@ -454,7 +418,6 @@ def main():
             print("Fail")
             return
         import_data(sys.argv[2])
-
     elif func == "insertViewer":
         if len(sys.argv) != 14:
             print("Fail")
@@ -479,7 +442,6 @@ def main():
             print("Fail")
             return
         insert_viewer(params)
-
     elif func == "addGenre":
         if len(sys.argv) != 4:
             print("Fail")
@@ -491,7 +453,6 @@ def main():
             print("Fail")
             return
         add_genre(uid, genre)
-
     elif func == "deleteViewer":
         if len(sys.argv) != 3:
             print("Fail")
@@ -502,7 +463,6 @@ def main():
             print("Fail")
             return
         delete_viewer(uid)
-
     elif func == "insertMovie":
         if len(sys.argv) != 4:
             print("Fail")
@@ -514,7 +474,6 @@ def main():
             print("Fail")
             return
         insert_movie(rid, website_url)
-
     elif func == "insertSession":
         if len(sys.argv) != 10:
             print("Fail")
@@ -533,7 +492,6 @@ def main():
             print("Fail")
             return
         insert_session(params)
-
     elif func == "updateRelease":
         if len(sys.argv) != 4:
             print("Fail")
@@ -545,7 +503,6 @@ def main():
             print("Fail")
             return
         update_release(rid, title)
-
     elif func == "listReleases":
         if len(sys.argv) != 3:
             print("Fail")
@@ -556,7 +513,6 @@ def main():
             print("Fail")
             return
         list_releases(uid)
-
     elif func == "popularRelease":
         if len(sys.argv) != 3:
             print("Fail")
@@ -567,7 +523,6 @@ def main():
             print("Fail")
             return
         popular_release(N)
-
     elif func == "releaseTitle":
         if len(sys.argv) != 3:
             print("Fail")
@@ -578,7 +533,6 @@ def main():
             print("Fail")
             return
         release_title(sid)
-
     elif func == "activeViewer":
         if len(sys.argv) != 5:
             print("Fail")
@@ -591,7 +545,6 @@ def main():
             print("Fail")
             return
         active_viewer(N, start_date, end_date)
-
     elif func == "videosViewed":
         if len(sys.argv) != 3:
             print("Fail")
@@ -602,7 +555,6 @@ def main():
             print("Fail")
             return
         videos_viewed(rid)
-
     else:
         print("Fail")
 
