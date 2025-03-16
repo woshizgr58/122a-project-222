@@ -161,16 +161,23 @@ def add_genre(uid, genre):
     try:
         cursor.execute("SELECT genres FROM Viewer WHERE uid = %s;", (uid,))
         result = cursor.fetchone()
-        # If viewer doesn't exist, we now print "Success" per discussion.
         if result is None:
-            # print("Success")
+            # If no matching user exists, we consider that a failure.
+            print("Fail")
             return
         current = result[0] if result[0] is not None else ""
         current = current.strip()
         if current == "":
             new_genres = genre
         else:
-            new_genres = current + ";" + genre
+            # Split the existing genres (case-insensitively).
+            current_list = [g.strip().lower() for g in current.split(';')]
+            if genre.lower() in current_list:
+                # If the genre is already present, print "Fail" as per test expectations.
+                print("Fail")
+                return
+            else:
+                new_genres = current + ";" + genre
         cursor.execute("UPDATE Viewer SET genres = %s WHERE uid = %s;", (new_genres, uid))
         conn.commit()
         print("Success")
