@@ -155,24 +155,25 @@ def insert_viewer(params):
 ##############################
 # 3) Add Genre
 ##############################
+
 def add_genre(uid, genre):
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("SELECT genres FROM Viewer WHERE uid = %s;", (uid,))
         result = cursor.fetchone()
-        # If no viewer exists, per test_addGenre1, print "Success"
+        # If no viewer exists, the operation should fail.
         if result is None:
             print("Fail")
             return
         current = result[0] if result[0] is not None else ""
         current = current.strip()
-        # Remove extra whitespace from input genre too.
+        # Remove extra whitespace from input genre.
         new_genre = genre.strip()
         if current == "":
             new_genres = new_genre
         else:
-            # Build a list of existing genres in lowercase (after stripping)
+            # Build a list of existing genres in lowercase.
             current_list = [g.strip().lower() for g in current.split(';')]
             if new_genre.lower() in current_list:
                 print("Fail")
