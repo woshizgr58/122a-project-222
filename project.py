@@ -197,26 +197,26 @@ def add_genre(uid, genre):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT genres FROM Users WHERE uid = %s;", (uid,))
-        result = cursor.fetchone()
-        # If no user found, print "Fail"
-        if result is None:
-            print("Fail")
-            return
-        current = result[0] if result[0] is not None else ""
-        current = current.strip()
-        new_genre = genre.strip()
-        if current == "":
-            new_genres = new_genre
-        else:
-            # Split on commas.
-            current_list = [g.strip().lower() for g in current.split(',')]
-            if new_genre.lower() in current_list:
-                print("Fail")
-                return
-            else:
-                new_genres = current + "," + new_genre
-        cursor.execute("UPDATE Users SET genres = %s WHERE uid = %s;", (new_genres, uid))
+        # cursor.execute("SELECT genres FROM Users WHERE uid = %s;", (uid,))
+        # result = cursor.fetchone()
+        # # If no user found, print "Fail"
+        # if result is None:
+        #     print("Fail")
+        #     return
+        # current = result[0] if result[0] is not None else ""
+        # current = current.strip()
+        # new_genre = genre.strip()
+        # if current == "":
+        #     new_genres = new_genre
+        # else:
+        #     # Split on commas.
+        #     current_list = [g.strip().lower() for g in current.split(',')]
+        #     if new_genre.lower() in current_list:
+        #         print("Fail")
+        #         return
+        #     else:
+        #         new_genres = current + "," + new_genre
+        cursor.execute("UPDATE Users SET genres = CONCAT(genres, ';', %s) WHERE uid = %s", (genre, uid))
         conn.commit()
         print("Success")
     except Exception:
