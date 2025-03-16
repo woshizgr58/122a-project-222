@@ -54,7 +54,7 @@ def import_data(folder):
                 FOREIGN KEY (uid) REFERENCES Users(uid) ON DELETE CASCADE
             );
         """
-        # Remaining tables per HW2 solution or your design.
+        # Create Releases table
         create_releases = """
             CREATE TABLE Releases (
                 rid INT PRIMARY KEY,
@@ -62,6 +62,7 @@ def import_data(folder):
                 title VARCHAR(255)
             );
         """
+        # Create Movies table
         create_movies = """
             CREATE TABLE Movies (
                 rid INT PRIMARY KEY,
@@ -69,6 +70,7 @@ def import_data(folder):
                 FOREIGN KEY (rid) REFERENCES Releases(rid)
             );
         """
+        # Create Sessions table
         create_sessions = """
             CREATE TABLE Sessions (
                 sid INT PRIMARY KEY,
@@ -83,6 +85,7 @@ def import_data(folder):
                 FOREIGN KEY (rid) REFERENCES Releases(rid)
             );
         """
+        # Create Reviews table
         create_reviews = """
             CREATE TABLE Reviews (
                 uid INT,
@@ -93,6 +96,7 @@ def import_data(folder):
                 FOREIGN KEY (rid) REFERENCES Releases(rid)
             );
         """
+        # Create Videos table
         create_videos = """
             CREATE TABLE Videos (
                 rid INT,
@@ -127,7 +131,7 @@ def import_data(folder):
                     cursor.execute(query, row)
                 conn.commit()
 
-        # Load CSV files; filenames should match table names.
+        # CSV files should be named exactly as table names.
         load_csv("Releases", 3)
         load_csv("Users", 9)      # uid, email, joined_date, nickname, street, city, state, zip, genres
         load_csv("Viewers", 4)    # uid, subscription, first, last
@@ -187,15 +191,15 @@ def insert_viewer(params):
 # 3) Add Genre
 ##############################
 def add_genre(uid, genre):
-    # For addGenre, per HW2, genres is stored in Users.genres as a comma-separated list.
+    # In HW2, genres is stored in Users.genres as a comma-separated list.
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("SELECT genres FROM Users WHERE uid = %s;", (uid,))
         result = cursor.fetchone()
-        # If no viewer found, print "Success" (per discussion)
+        # If no user found, print "Fail"
         if result is None:
-            print("Success")
+            print("Fail")
             return
         current = result[0] if result[0] is not None else ""
         current = current.strip()
@@ -203,7 +207,7 @@ def add_genre(uid, genre):
         if current == "":
             new_genres = new_genre
         else:
-            # Split on commas since HW2 uses commas.
+            # Split on commas.
             current_list = [g.strip().lower() for g in current.split(',')]
             if new_genre.lower() in current_list:
                 print("Fail")
@@ -315,10 +319,10 @@ def list_releases(uid):
         cursor.execute(query, (uid,))
         rows = cursor.fetchall()
         if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+            # If no rows, print nothing.
+            return
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -343,10 +347,9 @@ def popular_release(N):
         cursor.execute(query, (N,))
         rows = cursor.fetchall()
         if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+            return
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -371,10 +374,9 @@ def release_title(sid):
         cursor.execute(query, (sid,))
         rows = cursor.fetchall()
         if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join("" if x is None else str(x) for x in row))
+            return
+        for row in rows:
+            print(",".join("" if x is None else str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -388,12 +390,12 @@ def active_viewer(N, start_date, end_date):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Compare full datetime strings (no DATE() wrapper)
+        # Use DATE() on initiate_at for date-only comparison.
         query = """
             SELECT v.uid, v.first, v.last
             FROM Viewers v
             JOIN Sessions s ON v.uid = s.uid
-            WHERE s.initiate_at BETWEEN %s AND %s
+            WHERE DATE(s.initiate_at) BETWEEN %s AND %s
             GROUP BY v.uid, v.first, v.last
             HAVING COUNT(s.sid) >= %s
             ORDER BY v.uid ASC;
@@ -401,10 +403,9 @@ def active_viewer(N, start_date, end_date):
         cursor.execute(query, (start_date, end_date, N))
         rows = cursor.fetchall()
         if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+            return
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -431,10 +432,9 @@ def videos_viewed(rid):
         cursor.execute(query, (rid,))
         rows = cursor.fetchall()
         if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+            return
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
