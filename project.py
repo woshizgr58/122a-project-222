@@ -163,7 +163,7 @@ def add_genre(uid, genre):
         result = cursor.fetchone()
         # If viewer doesn't exist, we now print "Success" per discussion.
         if result is None:
-            print("Success")
+            # print("Success")
             return
         current = result[0] if result[0] is not None else ""
         current = current.strip()
