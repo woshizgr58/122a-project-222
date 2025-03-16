@@ -17,152 +17,137 @@ def get_connection():
         sys.exit(1)
 
 ##############################
-# Create Tables (DDL)
-##############################
-def createTable(cursor):
-    ddl_statements = [
-        # Users Table
-        """
-        CREATE TABLE Users (
-            uid INT,
-            email TEXT NOT NULL,
-            joined_date DATE NOT NULL,
-            nickname TEXT NOT NULL,
-            street TEXT,
-            city TEXT,
-            state TEXT,
-            zip TEXT,
-            genres TEXT,
-            PRIMARY KEY (uid)
-        );
-        """,
-        # Producers Table (Delta Table for ISA Relationship)
-        """
-        CREATE TABLE Producers (
-            uid INT,
-            bio TEXT,
-            company TEXT,
-            PRIMARY KEY (uid),
-            FOREIGN KEY (uid) REFERENCES Users(uid) ON DELETE CASCADE
-        );
-        """,
-        # Viewers Table (Delta Table for ISA Relationship)
-        """
-        CREATE TABLE Viewers (
-            uid INT,
-            subscription ENUM('free', 'monthly', 'yearly'),
-            first_name TEXT NOT NULL,
-            last_name TEXT NOT NULL,
-            PRIMARY KEY (uid),
-            FOREIGN KEY (uid) REFERENCES Users(uid) ON DELETE CASCADE
-        );
-        """,
-        # Releases Table
-        """
-        CREATE TABLE Releases (
-            rid INT,
-            producer_uid INT NOT NULL,
-            title TEXT NOT NULL,
-            genre TEXT NOT NULL,
-            release_date DATE NOT NULL,
-            PRIMARY KEY (rid),
-            FOREIGN KEY (producer_uid) REFERENCES Producers(uid) ON DELETE CASCADE
-        );
-        """,
-        # Movies Table (Delta Table for ISA Relationship)
-        """
-        CREATE TABLE Movies (
-            rid INT,
-            website_url TEXT,
-            PRIMARY KEY (rid),
-            FOREIGN KEY (rid) REFERENCES Releases(rid) ON DELETE CASCADE
-        );
-        """,
-        # Series Table (Delta Table for ISA Relationship)
-        """
-        CREATE TABLE Series (
-            rid INT,
-            introduction TEXT,
-            PRIMARY KEY (rid),
-            FOREIGN KEY (rid) REFERENCES Releases(rid) ON DELETE CASCADE
-        );
-        """,
-        # Videos Table (Weak Entity)
-        """
-        CREATE TABLE Videos (
-            rid INT,
-            ep_num INT NOT NULL,
-            title TEXT NOT NULL,
-            length INT NOT NULL,
-            PRIMARY KEY (rid, ep_num),
-            FOREIGN KEY (rid) REFERENCES Releases(rid) ON DELETE CASCADE
-        );
-        """,
-        # Sessions Table
-        """
-        CREATE TABLE Sessions (
-            sid INT,
-            uid INT NOT NULL,
-            rid INT NOT NULL,
-            ep_num INT NOT NULL,
-            initiate_at DATETIME NOT NULL,
-            leave_at DATETIME NOT NULL,
-            quality ENUM('480p', '720p', '1080p'),
-            device ENUM('mobile', 'desktop'),
-            PRIMARY KEY (sid),
-            FOREIGN KEY (uid) REFERENCES Viewers(uid) ON DELETE CASCADE,
-            FOREIGN KEY (rid, ep_num) REFERENCES Videos(rid, ep_num) ON DELETE CASCADE
-        );
-        """,
-        # Reviews Table
-        """
-        CREATE TABLE Reviews (
-            rvid INT,
-            uid INT NOT NULL,
-            rid INT NOT NULL,
-            rating DECIMAL(2,1) NOT NULL CHECK (rating BETWEEN 0 AND 5),
-            body TEXT,
-            posted_at DATETIME NOT NULL,
-            PRIMARY KEY (rvid),
-            FOREIGN KEY (uid) REFERENCES Viewers(uid) ON DELETE CASCADE,
-            FOREIGN KEY (rid) REFERENCES Releases(rid) ON DELETE CASCADE
-        );
-        """
-    ]
-    for ddl in ddl_statements:
-        cursor.execute(ddl)
-
-##############################
 # 1) Import Data
 ##############################
 def import_data(folder):
     conn = get_connection()
     cursor = conn.cursor()
+
+
     try:
         cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
-        tables = ["Sessions", "Reviews", "Movies", "Series", "Videos", "Viewers", "Producers", "Users", "`Releases`"]
+        # Drop tables in proper order.
+        tables = ["Sessions", "Reviews", "Movies", "Videos", "Viewers", "Users", "`Releases`"]
         for t in tables:
             cursor.execute(f"DROP TABLE IF EXISTS {t};")
         conn.commit()
 
-        createTable(cursor)
+        # Create Users table (from HW2)
+        create_users = """
+            CREATE TABLE Users (
+                uid INT,
+                email TEXT NOT NULL,
+                joined_date DATE NOT NULL,
+                nickname TEXT NOT NULL,
+                street TEXT,
+                city TEXT,
+                state TEXT,
+                zip TEXT,
+                genres TEXT,
+                PRIMARY KEY (uid)
+            );
+        """
+        # Create Viewers table (delta table for ISA)
+        create_viewers = """
+            CREATE TABLE Viewers (
+                uid INT,
+                subscription ENUM('free','monthly','yearly'),
+                first_name TEXT NOT NULL,
+                last_name TEXT NOT NULL,
+                PRIMARY KEY (uid),
+                FOREIGN KEY (uid) REFERENCES Users(uid) ON DELETE CASCADE
+            );
+        """
+        # Create Releases table
+        create_releases = """
+            CREATE TABLE Releases (
+                rid INT PRIMARY KEY,
+                genre VARCHAR(255),
+                title VARCHAR(255)
+            );
+        """
+        # Create Movies table
+        create_movies = """
+            CREATE TABLE Movies (
+                rid INT PRIMARY KEY,
+                website_url VARCHAR(255),
+                FOREIGN KEY (rid) REFERENCES Releases(rid)
+            );
+        """
+        # Create Sessions table
+        create_sessions = """
+            CREATE TABLE Sessions (
+                sid INT PRIMARY KEY,
+                uid INT,
+                rid INT,
+                ep_num INT,
+                initiate_at DATETIME,
+                leave_at DATETIME,
+                quality VARCHAR(50),
+                device VARCHAR(50),
+                FOREIGN KEY (uid) REFERENCES Viewers(uid),
+                FOREIGN KEY (rid) REFERENCES Releases(rid)
+            );
+        """
+        # Create Reviews table
+        create_reviews = """
+            CREATE TABLE Reviews (
+                uid INT,
+                rid INT,
+                review TEXT,
+                PRIMARY KEY (uid, rid),
+                FOREIGN KEY (uid) REFERENCES Viewers(uid),
+                FOREIGN KEY (rid) REFERENCES Releases(rid)
+            );
+        """
+        # Create Videos table
+        create_videos = """
+            CREATE TABLE Videos (
+                rid INT,
+                ep_num INT,
+                title VARCHAR(255),
+                length INT,
+                PRIMARY KEY (rid, ep_num),
+                FOREIGN KEY (rid) REFERENCES Releases(rid)
+            );
+        """
+        ddl_statements = [create_users, create_viewers, create_releases, create_movies, create_sessions, create_reviews, create_videos]
+        for ddl in ddl_statements:
+            cursor.execute(ddl)
         conn.commit()
+
         cursor.execute("SET FOREIGN_KEY_CHECKS=1;")
         conn.commit()
 
-        # Open the instructions file that contains load commands.
-        with open(f"{folder}/load_data_instructions.txt") as file:
-            for line in file:
-                cmds = line.split(' ')
-                cmds[4] = f"'{folder}/{cmds[4][1:-1]}'"
-                cursor.execute(' '.join(cmds).strip())
+        def load_csv(table_name, num_cols):
+            file_path = os.path.join(folder, f"{table_name}.csv")
+            if not os.path.isfile(file_path):
+                return
+            with open(file_path, newline='', encoding='utf-8') as csvfile:
+                reader = csv.reader(csvfile)
+                rows = list(reader)
+                if not rows:
+                    return
+                placeholders = ",".join(["%s"] * num_cols)
+                query = f"INSERT INTO {table_name} VALUES ({placeholders});"
+                for row in rows:
+                    row = [col if col != "" else None for col in row]
+                    cursor.execute(query, row)
                 conn.commit()
 
+        # CSV filenames should exactly match table names.
+        load_csv("Releases", 3)
+        load_csv("Users", 9)      # uid, email, joined_date, nickname, street, city, state, zip, genres
+        load_csv("Viewers", 4)    # uid, subscription, first_name, last_name
+        load_csv("Movies", 2)
+        load_csv("Sessions", 8)
+        load_csv("Reviews", 3)
+        load_csv("Videos", 4)
+
         print("Success")
-    except Exception as e:
-        print("Fail", e)
+    except Exception:
+        print("Fail")
     finally:
-        file.close()
         cursor.close()
         conn.close()
 
@@ -210,37 +195,37 @@ def insert_viewer(params):
 # 3) Add Genre
 ##############################
 def add_genre(uid, genre):
-    # In HW2, genres is stored in Users.genres as a semicolon-separated list.
+    # In HW2, genres is stored in Users.genres as a comma-separated list.
     conn = get_connection()
     cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT genres FROM Users WHERE uid = %s;", (uid,))
-        result = cursor.fetchone()
-        # If no user found, print "Success" per test_addGenre1 expectation.
-        if result is None:
-            print("Success")
-            return
-        current = result[0] if result[0] is not None else ""
-        current = current.strip()
-        new_genre = genre.strip()
-        if current == "":
-            new_genres = new_genre
-        else:
-            # Split on semicolons.
-            current_list = [g.strip().lower() for g in current.split(';')]
-            if new_genre.lower() in current_list:
-                print("Fail")
-                return
-            else:
-                new_genres = current + ";" + new_genre
-        cursor.execute("UPDATE Users SET genres = %s WHERE uid = %s;", (new_genres, uid))
-        conn.commit()
+        # cursor.execute("SELECT genres FROM Users WHERE uid = %s;", (uid,))
+        # result = cursor.fetchone()
+        # # If no user found, print "Fail"
+        # if result is None:
+        #     print("Fail")
+        #     return
+        # current = result[0] if result[0] is not None else ""
+        # current = current.strip()
+        # new_genre = genre.strip()
+        # if current == "":
+        #     new_genres = new_genre
+        # else:
+        #     # Split on commas.
+        #     current_list = [g.strip().lower() for g in current.split(',')]
+        #     if new_genre.lower() in current_list:
+        #         print("Fail")
+        #         return
+        #     else:
+        #         new_genres = current + "," + new_genre
+    cursor.execute("UPDATE Users SET genres = CONCAT(genres, ';', %s) WHERE uid = %s", (genre, uid))
+    conn.commit()
+    if cursor.rowcount > 0:
         print("Success")
-    except Exception:
+    else:
         print("Fail")
-    finally:
-        cursor.close()
-        conn.close()
+
+    cursor.close()
+    conn.close()
 
 ##############################
 # 4) Delete Viewer
@@ -309,10 +294,10 @@ def update_release(rid, title):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        query = "UPDATE Releases SET title = %s WHERE rid = %s;"
+        query = "UPDATE `Releases` SET title = %s WHERE rid = %s;"
         cursor.execute(query, (title, rid))
         if cursor.rowcount == 0:
-            cursor.execute("INSERT INTO Releases (rid, genre, title, release_date) VALUES (%s, %s, %s, CURDATE());", (rid, "", title))
+            cursor.execute("INSERT INTO `Releases` (rid, genre, title) VALUES (%s, %s, %s);", (rid, "", title))
         conn.commit()
         print("Success")
     except Exception:
@@ -331,7 +316,7 @@ def list_releases(uid):
         query = """
             SELECT DISTINCT r.rid, r.genre, r.title
             FROM Reviews rv
-            JOIN Releases r ON rv.rid = r.rid
+            JOIN `Releases` r ON rv.rid = r.rid
             WHERE rv.uid = %s
             ORDER BY r.title ASC;
         """
@@ -356,7 +341,7 @@ def popular_release(N):
     try:
         query = """
             SELECT r.rid, r.title, COUNT(rv.uid) AS reviewCount
-            FROM Releases r
+            FROM `Releases` r
             LEFT JOIN Reviews rv ON r.rid = rv.rid
             GROUP BY r.rid, r.title
             ORDER BY reviewCount DESC, r.rid DESC
@@ -384,7 +369,7 @@ def release_title(sid):
         query = """
             SELECT r.rid, r.title, r.genre, IFNULL(v.title,''), s.ep_num, IFNULL(v.length,0)
             FROM Sessions s
-            JOIN Releases r ON s.rid = r.rid
+            JOIN `Releases` r ON s.rid = r.rid
             LEFT JOIN Videos v ON s.rid = v.rid AND s.ep_num = v.ep_num
             WHERE s.sid = %s
             ORDER BY r.title ASC;
@@ -392,7 +377,6 @@ def release_title(sid):
         cursor.execute(query, (sid,))
         rows = cursor.fetchall()
         if not rows:
-            print("Fail")
             return
         for row in rows:
             print(",".join("" if x is None else str(x) for x in row))
