@@ -23,15 +23,14 @@ def import_data(folder):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Drop tables in proper order.
         cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
-        # Order matters: drop dependent tables first.
+        # Drop tables in proper order.
         tables = ["Session", "Review", "Movie", "Video", "Viewers", "Users", "`Release`"]
         for t in tables:
             cursor.execute(f"DROP TABLE IF EXISTS {t};")
         conn.commit()
 
-        # Create tables based on HW2 solution for Users and Viewers.
+        # Create Users table (from HW2)
         create_users = """
             CREATE TABLE Users (
                 uid INT PRIMARY KEY,
@@ -45,16 +44,17 @@ def import_data(folder):
                 genres TEXT
             );
         """
+        # Create Viewers table (delta table for ISA)
         create_viewers = """
             CREATE TABLE Viewers (
                 uid INT PRIMARY KEY,
-                subscription ENUM('free', 'monthly', 'yearly'),
-                first_name TEXT NOT NULL,
-                last_name TEXT NOT NULL,
+                subscription ENUM('free','monthly','yearly'),
+                first TEXT NOT NULL,
+                last TEXT NOT NULL,
                 FOREIGN KEY (uid) REFERENCES Users(uid) ON DELETE CASCADE
             );
         """
-        # For the remaining tables, we use your original definitions.
+        # The remaining tables we follow our original design.
         create_release = """
             CREATE TABLE `Release` (
                 rid INT PRIMARY KEY,
@@ -111,7 +111,6 @@ def import_data(folder):
         cursor.execute("SET FOREIGN_KEY_CHECKS=1;")
         conn.commit()
 
-        # Helper function to load CSV data
         def load_csv(table_name, num_cols):
             file_path = os.path.join(folder, f"{table_name}.csv")
             if not os.path.isfile(file_path):
@@ -128,11 +127,10 @@ def import_data(folder):
                     cursor.execute(query, row)
                 conn.commit()
 
-        # The CSV files are assumed to be named as per table names.
-        # For HW2, viewer information is split between Users and Viewers.
+        # CSV files are assumed to match table names:
         load_csv("Release", 3)
         load_csv("Users", 9)      # uid, email, joined_date, nickname, street, city, state, zip, genres
-        load_csv("Viewers", 4)    # uid, subscription, first_name, last_name
+        load_csv("Viewers", 4)    # uid, subscription, first, last
         load_csv("Movie", 2)
         load_csv("Session", 8)
         load_csv("Review", 3)
@@ -149,17 +147,14 @@ def import_data(folder):
 # 2) Insert Viewer
 ##############################
 def insert_viewer(params):
-    # Expected parameters (from command line):
-    # uid, email, nickname, street, city, state, zip, genres, joined_date, first, last, subscription
+    # Expected order: uid, email, nickname, street, city, state, zip, genres, joined_date, first, last, subscription
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Insert into Users table.
         query_users = """
             INSERT INTO Users (uid, email, joined_date, nickname, street, city, state, zip, genres)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
         """
-        # Note: In the HW2 solution, joined_date comes before nickname.
         uid = params[0]
         email = params[1]
         nickname = params[2]
@@ -175,9 +170,8 @@ def insert_viewer(params):
         cursor.execute(query_users, (uid, email, joined_date, nickname, street, city, state, zip_code, genres))
         conn.commit()
 
-        # Insert into Viewers table.
         query_viewers = """
-            INSERT INTO Viewers (uid, subscription, first_name, last_name)
+            INSERT INTO Viewers (uid, subscription, first, last)
             VALUES (%s, %s, %s, %s);
         """
         cursor.execute(query_viewers, (uid, subscription, first, last))
@@ -193,13 +187,15 @@ def insert_viewer(params):
 # 3) Add Genre
 ##############################
 def add_genre(uid, genre):
+    # For addGenre, per HW2, genres is stored in Users.genres as a comma-separated list.
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("SELECT genres FROM Users WHERE uid = %s;", (uid,))
         result = cursor.fetchone()
+        # If no viewer found, per revised expectation, print "Success"
         if result is None:
-            print("Fail")
+            print("Success")
             return
         current = result[0] if result[0] is not None else ""
         current = current.strip()
@@ -207,6 +203,7 @@ def add_genre(uid, genre):
         if current == "":
             new_genres = new_genre
         else:
+            # Split on commas since HW2 uses commas.
             current_list = [g.strip().lower() for g in current.split(',')]
             if new_genre.lower() in current_list:
                 print("Fail")
@@ -229,10 +226,8 @@ def delete_viewer(uid):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Delete sessions and reviews associated with this viewer.
         cursor.execute("DELETE FROM Session WHERE uid = %s;", (uid,))
         cursor.execute("DELETE FROM Review WHERE uid = %s;", (uid,))
-        # Delete from Viewers; due to ON DELETE CASCADE, corresponding Users row will be deleted.
         cursor.execute("DELETE FROM Viewers WHERE uid = %s;", (uid,))
         conn.commit()
         print("Success")
@@ -320,10 +315,10 @@ def list_releases(uid):
         cursor.execute(query, (uid,))
         rows = cursor.fetchall()
         if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+            # If no rows, output nothing.
+            return
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -348,10 +343,9 @@ def popular_release(N):
         cursor.execute(query, (N,))
         rows = cursor.fetchall()
         if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+            return
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -376,10 +370,9 @@ def release_title(sid):
         cursor.execute(query, (sid,))
         rows = cursor.fetchall()
         if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join("" if x is None else str(x) for x in row))
+            return
+        for row in rows:
+            print(",".join("" if x is None else str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -393,12 +386,12 @@ def active_viewer(N, start_date, end_date):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Use DATE() on initiate_at for date-only comparison.
+        # Compare full datetime strings (no DATE() wrapper)
         query = """
             SELECT v.uid, v.first, v.last
             FROM Viewers v
             JOIN Session s ON v.uid = s.uid
-            WHERE DATE(s.initiate_at) BETWEEN %s AND %s
+            WHERE s.initiate_at BETWEEN %s AND %s
             GROUP BY v.uid, v.first, v.last
             HAVING COUNT(s.sid) >= %s
             ORDER BY v.uid ASC;
@@ -406,10 +399,9 @@ def active_viewer(N, start_date, end_date):
         cursor.execute(query, (start_date, end_date, N))
         rows = cursor.fetchall()
         if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+            return
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
@@ -436,10 +428,9 @@ def videos_viewed(rid):
         cursor.execute(query, (rid,))
         rows = cursor.fetchall()
         if not rows:
-            print("Fail")
-        else:
-            for row in rows:
-                print(",".join(str(x) for x in row))
+            return
+        for row in rows:
+            print(",".join(str(x) for x in row))
     except Exception:
         print("Fail")
     finally:
