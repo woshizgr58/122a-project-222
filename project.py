@@ -199,7 +199,7 @@ def add_genre(uid, genre):
         result = cursor.fetchone()
         # If no user found, print "Fail"
         if result is None:
-            print("Fail")
+            print("monkey")
             return
         current = result[0] if result[0] is not None else ""
         current = current.strip()
