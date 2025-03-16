@@ -219,10 +219,11 @@ def add_genre(uid, genre):
         #         new_genres = current + "," + new_genre
     cursor.execute("UPDATE Users SET genres = CONCAT(genres, ';', %s) WHERE uid = %s", (genre, uid))
     conn.commit()
+    updated_value = cursor.fetchone()[0]
     if cursor.rowcount > 0:
         print("Success")
     else:
-        print("Fail", cursor.rowcount)
+        print("Fail", updated_value)
 
     cursor.close()
     conn.close()
