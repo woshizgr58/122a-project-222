@@ -17,21 +17,24 @@ def get_connection():
         sys.exit(1)
 
 ##############################
-# 1) Import Data
+# 1) Import Data (DDL and CSV load)
 ##############################
 def import_data(folder):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
         # Drop tables in proper order.
-        tables = ["Sessions", "Reviews", "Movies", "Videos", "Viewers", "Users", "`Releases`"]
+        cursor.execute("SET FOREIGN_KEY_CHECKS=0;")
+        tables = ["Sessions", "Reviews", "Movies", "Series", "Videos", "Viewers", "Producers", "Users", "`Releases`"]
         for t in tables:
             cursor.execute(f"DROP TABLE IF EXISTS {t};")
         conn.commit()
 
-        # Create Users table (from HW2)
-        create_users = """
+        # DDL Statements per assignment:
+
+        ddl_statements = [
+            # Users Table (10 points)
+            """
             CREATE TABLE Users (
                 uid INT,
                 email TEXT NOT NULL,
@@ -44,72 +47,101 @@ def import_data(folder):
                 genres TEXT,
                 PRIMARY KEY (uid)
             );
-        """
-        # Create Viewers table (delta table for ISA)
-        create_viewers = """
+            """,
+            # Producers Table (Delta Table for ISA Relationship) (10 points)
+            """
+            CREATE TABLE Producers (
+                uid INT,
+                bio TEXT,
+                company TEXT,
+                PRIMARY KEY (uid),
+                FOREIGN KEY (uid) REFERENCES Users(uid) ON DELETE CASCADE
+            );
+            """,
+            # Viewers Table (Delta Table for ISA Relationship) (10 points)
+            """
             CREATE TABLE Viewers (
                 uid INT,
-                subscription ENUM('free','monthly','yearly'),
+                subscription ENUM('free', 'monthly', 'yearly'),
                 first_name TEXT NOT NULL,
                 last_name TEXT NOT NULL,
                 PRIMARY KEY (uid),
                 FOREIGN KEY (uid) REFERENCES Users(uid) ON DELETE CASCADE
             );
-        """
-        # Create Releases table
-        create_releases = """
+            """,
+            # Releases Table (10 points)
+            """
             CREATE TABLE Releases (
-                rid INT PRIMARY KEY,
-                genre VARCHAR(255),
-                title VARCHAR(255)
+                rid INT,
+                producer_uid INT NOT NULL,
+                title TEXT NOT NULL,
+                genre TEXT NOT NULL,
+                release_date DATE NOT NULL,
+                PRIMARY KEY (rid),
+                FOREIGN KEY (producer_uid) REFERENCES Producers(uid) ON DELETE CASCADE
             );
-        """
-        # Create Movies table
-        create_movies = """
+            """,
+            # Movies Table (Delta Table for ISA Relationship) (10 points)
+            """
             CREATE TABLE Movies (
-                rid INT PRIMARY KEY,
-                website_url VARCHAR(255),
-                FOREIGN KEY (rid) REFERENCES Releases(rid)
-            );
-        """
-        # Create Sessions table
-        create_sessions = """
-            CREATE TABLE Sessions (
-                sid INT PRIMARY KEY,
-                uid INT,
                 rid INT,
-                ep_num INT,
-                initiate_at DATETIME,
-                leave_at DATETIME,
-                quality VARCHAR(50),
-                device VARCHAR(50),
-                FOREIGN KEY (uid) REFERENCES Viewers(uid),
-                FOREIGN KEY (rid) REFERENCES Releases(rid)
+                website_url TEXT,
+                PRIMARY KEY (rid),
+                FOREIGN KEY (rid) REFERENCES Releases(rid) ON DELETE CASCADE
             );
-        """
-        # Create Reviews table
-        create_reviews = """
-            CREATE TABLE Reviews (
-                uid INT,
+            """,
+            # Series Table (Delta Table for ISA Relationship) (10 points)
+            """
+            CREATE TABLE Series (
                 rid INT,
-                review TEXT,
-                PRIMARY KEY (uid, rid),
-                FOREIGN KEY (uid) REFERENCES Viewers(uid),
-                FOREIGN KEY (rid) REFERENCES Releases(rid)
+                introduction TEXT,
+                PRIMARY KEY (rid),
+                FOREIGN KEY (rid) REFERENCES Releases(rid) ON DELETE CASCADE
             );
-        """
-        # Create Videos table
-        create_videos = """
+            """,
+            # Videos Table (Weak Entity) (10 points)
+            """
             CREATE TABLE Videos (
                 rid INT,
-                ep_num INT,
-                title VARCHAR(255),
-                length INT,
+                ep_num INT NOT NULL,
+                title TEXT NOT NULL,
+                length INT NOT NULL,
                 PRIMARY KEY (rid, ep_num),
-                FOREIGN KEY (rid) REFERENCES Releases(rid)
+                FOREIGN KEY (rid) REFERENCES Releases(rid) ON DELETE CASCADE
             );
-        """
-        ddl_statements = [create_users, create_viewers, create_releases, create_movies, create_sessions, create_reviews, create_videos]
+            """,
+            # Sessions Table (15 points)
+            """
+            CREATE TABLE Sessions (
+                sid INT,
+                uid INT NOT NULL,
+                rid INT NOT NULL,
+                ep_num INT NOT NULL,
+                initiate_at DATETIME NOT NULL,
+                leave_at DATETIME NOT NULL,
+                quality ENUM('480p', '720p', '1080p'),
+                device ENUM('mobile', 'desktop'),
+                PRIMARY KEY (sid),
+                FOREIGN KEY (uid) REFERENCES Viewers(uid) ON DELETE CASCADE,
+                FOREIGN KEY (rid, ep_num) REFERENCES Videos(rid, ep_num) ON DELETE CASCADE
+            );
+            """,
+            # Reviews Table (15 points)
+            """
+            CREATE TABLE Reviews (
+                rvid INT,
+                uid INT NOT NULL,
+                rid INT NOT NULL,
+                rating DECIMAL(2,1) NOT NULL CHECK (rating BETWEEN 0 AND 5),
+                body TEXT,
+                posted_at DATETIME NOT NULL,
+                PRIMARY KEY (rvid),
+                FOREIGN KEY (uid) REFERENCES Viewers(uid) ON DELETE CASCADE,
+                FOREIGN KEY (rid) REFERENCES Releases(rid) ON DELETE CASCADE
+            );
+            """
+        ]
+
         for ddl in ddl_statements:
             cursor.execute(ddl)
         conn.commit()
@@ -117,6 +149,7 @@ def import_data(folder):
         cursor.execute("SET FOREIGN_KEY_CHECKS=1;")
         conn.commit()
 
+        # Helper function to load CSV data.
         def load_csv(table_name, num_cols):
             file_path = os.path.join(folder, f"{table_name}.csv")
             if not os.path.isfile(file_path):
@@ -133,14 +166,16 @@ def import_data(folder):
                     cursor.execute(query, row)
                 conn.commit()
 
-        # CSV filenames should exactly match table names.
-        load_csv("Releases", 3)
-        load_csv("Users", 9)      # uid, email, joined_date, nickname, street, city, state, zip, genres
-        load_csv("Viewers", 4)    # uid, subscription, first_name, last_name
+        # Load CSV files (the file names should exactly match the table names used above).
+        load_csv("Releases", 5)    # rid, producer_uid, title, genre, release_date
+        load_csv("Users", 9)       # uid, email, joined_date, nickname, street, city, state, zip, genres
+        load_csv("Producers", 3)   # uid, bio, company
+        load_csv("Viewers", 4)     # uid, subscription, first_name, last_name
         load_csv("Movies", 2)
-        load_csv("Sessions", 8)
-        load_csv("Reviews", 3)
+        load_csv("Series", 1)      # Assuming Series CSV contains: rid, introduction (if present; adjust num_cols as needed)
         load_csv("Videos", 4)
+        load_csv("Sessions", 8)
+        load_csv("Reviews", 6)     # rvid, uid, rid, rating, body, posted_at
 
         print("Success")
     except Exception:
@@ -199,7 +234,6 @@ def add_genre(uid, genre):
     try:
         cursor.execute("SELECT genres FROM Users WHERE uid = %s;", (uid,))
         result = cursor.fetchone()
-        # If no user found, print "Fail"
         if result is None:
             print("Fail")
             return
@@ -292,10 +326,10 @@ def update_release(rid, title):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        query = "UPDATE `Releases` SET title = %s WHERE rid = %s;"
+        query = "UPDATE Releases SET title = %s WHERE rid = %s;"
         cursor.execute(query, (title, rid))
         if cursor.rowcount == 0:
-            cursor.execute("INSERT INTO `Releases` (rid, genre, title) VALUES (%s, %s, %s);", (rid, "", title))
+            cursor.execute("INSERT INTO Releases (rid, genre, title, release_date) VALUES (%s, %s, %s, CURDATE());", (rid, "", title))
         conn.commit()
         print("Success")
     except Exception:
@@ -314,7 +348,7 @@ def list_releases(uid):
         query = """
             SELECT DISTINCT r.rid, r.genre, r.title
             FROM Reviews rv
-            JOIN `Releases` r ON rv.rid = r.rid
+            JOIN Releases r ON rv.rid = r.rid
             WHERE rv.uid = %s
             ORDER BY r.title ASC;
         """
@@ -339,7 +373,7 @@ def popular_release(N):
     try:
         query = """
             SELECT r.rid, r.title, COUNT(rv.uid) AS reviewCount
-            FROM `Releases` r
+            FROM Releases r
             LEFT JOIN Reviews rv ON r.rid = rv.rid
             GROUP BY r.rid, r.title
             ORDER BY reviewCount DESC, r.rid DESC
@@ -367,7 +401,7 @@ def release_title(sid):
         query = """
             SELECT r.rid, r.title, r.genre, IFNULL(v.title,''), s.ep_num, IFNULL(v.length,0)
             FROM Sessions s
-            JOIN `Releases` r ON s.rid = r.rid
+            JOIN Releases r ON s.rid = r.rid
             LEFT JOIN Videos v ON s.rid = v.rid AND s.ep_num = v.ep_num
             WHERE s.sid = %s
             ORDER BY r.title ASC;
