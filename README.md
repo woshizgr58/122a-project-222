@@ -3,8 +3,6 @@
 A MySQL-backed database management system for a streaming service, built in Python.
 The project provides a command-line interface (CLI) to import, insert, update, and query streaming-related data such as users, viewers, releases, movies, sessions, reviews, and videos.
 
-This project was developed as part of CS122A – Introduction to Data Management coursework.
-
 ⸻
 
 ## 🚀 Features
